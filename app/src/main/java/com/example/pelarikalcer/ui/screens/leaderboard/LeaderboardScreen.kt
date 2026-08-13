@@ -80,301 +80,314 @@ fun LeaderboardScreen(
         isSearching = false
     }
 
-    Column(
+    // Entire Screen in a single unified LazyColumn for 100% responsive scrolling on all device screen sizes
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(DeepNavy)
     ) {
-        // Header
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(CardSurface, DeepNavy)))
-                .padding(horizontal = 24.dp, vertical = 20.dp)
-        ) {
-            Column {
-                Text(
-                    text = "Leaderboard",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = TextPrimary
-                )
-                Text(
-                    text = "Peringkat & koneksi sesama pelari",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
-                )
-            }
-        }
-
-        // Tabs
-        TabRow(
-            selectedTabIndex = selectedTab,
-            containerColor = CardSurface,
-            contentColor = NeonGreen,
-            indicator = { tabPositions ->
-                TabRowDefaults.SecondaryIndicator(
-                    modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                    color = NeonGreen
-                )
-            }
-        ) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                text = { Text("Global", fontWeight = FontWeight.Bold, fontSize = 15.sp) }
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
-                text = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Teman", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        if (pendingRequests.isNotEmpty()) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .background(StreakOrange, CircleShape)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    "${pendingRequests.size}",
-                                    color = DeepNavy,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                            }
-                        }
-                    }
-                }
-            )
-        }
-
-        // Incoming Friend Requests Section (on Friends Tab)
-        if (selectedTab == 1 && pendingRequests.isNotEmpty()) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = CardSurface),
-                border = BorderStroke(1.dp, NeonGreen.copy(alpha = 0.4f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.PersonAdd, contentDescription = null, tint = NeonGreen, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "Permintaan Pertemanan (${pendingRequests.size})",
-                            fontWeight = FontWeight.Bold,
-                            color = NeonGreen,
-                            fontSize = 14.sp
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    pendingRequests.forEach { sender ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(NeonGreen.copy(alpha = 0.2f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    (sender.username.firstOrNull()?.uppercaseChar() ?: '?').toString(),
-                                    fontWeight = FontWeight.Bold,
-                                    color = NeonGreen
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(sender.username, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
-                                Text("Ingin menjadi temanmu", color = TextMuted, fontSize = 11.sp)
-                            }
-                            Button(
-                                onClick = { onAcceptRequest(sender) },
-                                shape = RoundedCornerShape(20.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
-                            ) {
-                                Text("Terima", color = DeepNavy, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
-                            Spacer(modifier = Modifier.width(6.dp))
-                            OutlinedButton(
-                                onClick = { onRejectRequest(sender) },
-                                shape = RoundedCornerShape(20.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed),
-                                border = BorderStroke(1.dp, DangerRed)
-                            ) {
-                                Text("Tolak", color = DangerRed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Search & Add Friend bar on Friends Tab
-        if (selectedTab == 1) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = CardSurface)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "Cari & Tambah Teman",
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = { Text("Ketik nama pelari...", color = TextMuted, fontSize = 13.sp) },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextMuted) },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = TextMuted)
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = NeonGreen,
-                            unfocusedBorderColor = TextMuted,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            cursorColor = NeonGreen
-                        )
-                    )
-
-                    // Display Cloud Search Results if search is active
-                    if (searchQuery.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        if (isSearching) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(8.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    color = NeonGreen,
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Mencari...", color = TextMuted, fontSize = 12.sp)
-                            }
-                        } else if (cloudSearchResults.isEmpty()) {
-                            Text(
-                                "Tidak ada pengguna dengan nama '$searchQuery'",
-                                color = TextMuted,
-                                fontSize = 12.sp,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        } else {
-                            Text(
-                                "Hasil Pencarian (${cloudSearchResults.size})",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = NeonGreen
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            cloudSearchResults.forEach { user ->
-                                val isFriend = friendUserIds.contains(user.userId) || (user.email.isNotBlank() && friendEmails.contains(user.email))
-                                val isPendingSent = sentRequestEmails.contains(user.email)
-                                UserAddCard(
-                                    user = user,
-                                    isFriend = isFriend,
-                                    isPendingSent = isPendingSent,
-                                    onSendRequest = { onSendRequest(user) },
-                                    onRemoveFriend = { onRemoveFriend(user) }
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Suggested Friends Section (if search is empty and on Friends Tab)
-        if (selectedTab == 1 && searchQuery.isBlank() && suggestedFriends.isNotEmpty()) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                Text(
-                    "Rekomendasi Pelari Lain",
-                    fontWeight = FontWeight.Bold,
-                    color = NeonGreen,
-                    fontSize = 13.sp
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                suggestedFriends.take(3).forEach { user ->
-                    val isFriend = friendUserIds.contains(user.userId) || (user.email.isNotBlank() && friendEmails.contains(user.email))
-                    val isPendingSent = sentRequestEmails.contains(user.email)
-                    UserAddCard(
-                        user = user,
-                        isFriend = isFriend,
-                        isPendingSent = isPendingSent,
-                        onSendRequest = { onSendRequest(user) },
-                        onRemoveFriend = { onRemoveFriend(user) }
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                }
-            }
-        }
-
-        // Top 3 Podium
-        if (activeList.size >= 3 && searchQuery.isBlank()) {
-            PodiumRow(
-                first = activeList[0],
-                second = activeList[1],
-                third = activeList[2],
-                currentUserId = currentUserId
-            )
-        } else if (selectedTab == 1 && activeList.size <= 1 && searchQuery.isBlank()) {
+        // 1. Header
+        item {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 24.dp),
-                contentAlignment = Alignment.Center
+                    .background(Brush.verticalGradient(listOf(CardSurface, DeepNavy)))
+                    .padding(horizontal = 24.dp, vertical = 20.dp)
             ) {
-                Text(
-                    "Belum ada teman berteman. Cari & kirim permintaan pertemanan di atas!",
-                    color = TextSecondary,
-                    textAlign = TextAlign.Center,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 32.dp)
+                Column {
+                    Text(
+                        text = "Leaderboard",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Peringkat & koneksi sesama pelari",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
+                    )
+                }
+            }
+        }
+
+        // 2. Tabs
+        item {
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = CardSurface,
+                contentColor = NeonGreen,
+                indicator = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                        color = NeonGreen
+                    )
+                }
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text("Global", fontWeight = FontWeight.Bold, fontSize = 15.sp) }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Teman", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            if (pendingRequests.isNotEmpty()) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .background(StreakOrange, CircleShape)
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        "${pendingRequests.size}",
+                                        color = DeepNavy,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+                            }
+                        }
+                    }
                 )
             }
         }
 
-        HorizontalDivider(color = TextMuted.copy(alpha = 0.2f), modifier = Modifier.padding(horizontal = 20.dp))
+        // 3. Incoming Friend Requests Section (on Friends Tab)
+        if (selectedTab == 1 && pendingRequests.isNotEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = CardSurface),
+                    border = BorderStroke(1.dp, NeonGreen.copy(alpha = 0.4f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.PersonAdd, contentDescription = null, tint = NeonGreen, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Permintaan Pertemanan (${pendingRequests.size})",
+                                fontWeight = FontWeight.Bold,
+                                color = NeonGreen,
+                                fontSize = 14.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        pendingRequests.forEach { sender ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(NeonGreen.copy(alpha = 0.2f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        (sender.username.firstOrNull()?.uppercaseChar() ?: '?').toString(),
+                                        fontWeight = FontWeight.Bold,
+                                        color = NeonGreen
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(sender.username, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
+                                    Text("Ingin menjadi temanmu", color = TextMuted, fontSize = 11.sp)
+                                }
+                                Button(
+                                    onClick = { onAcceptRequest(sender) },
+                                    shape = RoundedCornerShape(20.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
+                                ) {
+                                    Text("Terima", color = DeepNavy, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                OutlinedButton(
+                                    onClick = { onRejectRequest(sender) },
+                                    shape = RoundedCornerShape(20.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed),
+                                    border = BorderStroke(1.dp, DangerRed)
+                                ) {
+                                    Text("Tolak", color = DangerRed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-        // Rest of list
+        // 4. Search & Add Friend bar on Friends Tab
+        if (selectedTab == 1) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = CardSurface)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "Cari & Tambah Teman",
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("Ketik nama pelari...", color = TextMuted, fontSize = 13.sp) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextMuted) },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Clear", tint = TextMuted)
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonGreen,
+                                unfocusedBorderColor = TextMuted,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                cursorColor = NeonGreen
+                            )
+                        )
+
+                        // Display Cloud Search Results if search is active
+                        if (searchQuery.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            if (isSearching) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        color = NeonGreen,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Mencari...", color = TextMuted, fontSize = 12.sp)
+                                }
+                            } else if (cloudSearchResults.isEmpty()) {
+                                Text(
+                                    "Tidak ada pengguna dengan nama '$searchQuery'",
+                                    color = TextMuted,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            } else {
+                                Text(
+                                    "Hasil Pencarian (${cloudSearchResults.size})",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NeonGreen
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                cloudSearchResults.forEach { user ->
+                                    val isFriend = friendUserIds.contains(user.userId) || (user.email.isNotBlank() && friendEmails.contains(user.email))
+                                    val isPendingSent = sentRequestEmails.contains(user.email)
+                                    UserAddCard(
+                                        user = user,
+                                        isFriend = isFriend,
+                                        isPendingSent = isPendingSent,
+                                        onSendRequest = { onSendRequest(user) },
+                                        onRemoveFriend = { onRemoveFriend(user) }
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. Suggested Friends Section (if search is empty and on Friends Tab)
+        if (selectedTab == 1 && searchQuery.isBlank() && suggestedFriends.isNotEmpty()) {
+            item {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    Text(
+                        "Rekomendasi Pelari Lain",
+                        fontWeight = FontWeight.Bold,
+                        color = NeonGreen,
+                        fontSize = 13.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    suggestedFriends.take(3).forEach { user ->
+                        val isFriend = friendUserIds.contains(user.userId) || (user.email.isNotBlank() && friendEmails.contains(user.email))
+                        val isPendingSent = sentRequestEmails.contains(user.email)
+                        UserAddCard(
+                            user = user,
+                            isFriend = isFriend,
+                            isPendingSent = isPendingSent,
+                            onSendRequest = { onSendRequest(user) },
+                            onRemoveFriend = { onRemoveFriend(user) }
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+                }
+            }
+        }
+
+        // 6. Top 3 Podium
+        if (activeList.size >= 3 && searchQuery.isBlank()) {
+            item {
+                PodiumRow(
+                    first = activeList[0],
+                    second = activeList[1],
+                    third = activeList[2],
+                    currentUserId = currentUserId
+                )
+            }
+        } else if (selectedTab == 1 && activeList.size <= 1 && searchQuery.isBlank()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Belum ada teman berteman. Cari & kirim permintaan pertemanan di atas!",
+                        color = TextSecondary,
+                        textAlign = TextAlign.Center,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 32.dp)
+                    )
+                }
+            }
+        }
+
+        item {
+            HorizontalDivider(color = TextMuted.copy(alpha = 0.2f), modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+        }
+
+        // 7. Rest of Leaderboard list
         if (activeList.isNotEmpty() && searchQuery.isBlank()) {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val restList = if (activeList.size > 3) activeList.drop(3) else activeList
-                itemsIndexed(restList) { index, user ->
-                    val rank = if (activeList.size > 3) index + 4 else index + 1
-                    val isFriend = friendUserIds.contains(user.userId) || (user.email.isNotBlank() && friendEmails.contains(user.email))
-                    val isPendingSent = sentRequestEmails.contains(user.email)
+            val restList = if (activeList.size > 3) activeList.drop(3) else activeList
+            itemsIndexed(restList) { index, user ->
+                val rank = if (activeList.size > 3) index + 4 else index + 1
+                val isFriend = friendUserIds.contains(user.userId) || (user.email.isNotBlank() && friendEmails.contains(user.email))
+                val isPendingSent = sentRequestEmails.contains(user.email)
+                Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
                     LeaderboardRow(
                         rank = rank,
                         user = user,
@@ -385,8 +398,12 @@ fun LeaderboardScreen(
                         onRemoveFriend = { onRemoveFriend(user) }
                     )
                 }
-                item { Spacer(modifier = Modifier.height(80.dp)) }
             }
+        }
+
+        // 8. Bottom Navigation Spacing
+        item {
+            Spacer(modifier = Modifier.height(100.dp))
         }
     }
 }
@@ -438,7 +455,7 @@ fun UserAddCard(
                 }
                 isPendingSent -> {
                     OutlinedButton(
-                        onClick = onRemoveFriend, // click cancels request
+                        onClick = onRemoveFriend,
                         shape = RoundedCornerShape(20.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = StreakOrange),
