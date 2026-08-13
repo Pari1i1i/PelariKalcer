@@ -1,6 +1,7 @@
 package com.example.pelarikalcer.ui.screens.leaderboard
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -24,33 +25,59 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.pelarikalcer.data.local.entity.UserEntity
+import com.example.pelarikalcer.data.remote.SupabaseClient
 import com.example.pelarikalcer.ui.theme.*
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 
 @Composable
 fun LeaderboardScreen(
     globalLeaderboard: List<UserEntity>,
     friendsLeaderboard: List<UserEntity>,
     suggestedFriends: List<UserEntity> = emptyList(),
+    pendingRequests: List<UserEntity> = emptyList(),
+    sentRequestEmails: Set<String> = emptySet(),
     friendUserIds: Set<Int> = emptySet(),
     currentUserId: Int,
-    onToggleFriend: (UserEntity) -> Unit = {},
-    onAddFriendByUsername: (String, (String) -> Unit) -> Unit = { _, _ -> }
+    currentUserEmail: String = "",
+    onSendRequest: (UserEntity) -> Unit = {},
+    onAcceptRequest: (UserEntity) -> Unit = {},
+    onRejectRequest: (UserEntity) -> Unit = {},
+    onRemoveFriend: (UserEntity) -> Unit = {}
 ) {
     var selectedTab by remember { mutableIntStateOf(0) } // 0: Global, 1: Teman
     val activeList = if (selectedTab == 0) globalLeaderboard else friendsLeaderboard
 
     var searchQuery by remember { mutableStateOf("") }
+    var cloudSearchResults by remember { mutableStateOf<List<UserEntity>>(emptyList()) }
+    var isSearching by remember { mutableStateOf(false) }
+    var searchJob by remember { mutableStateOf<Job?>(null) }
 
-    // Live search filtered candidates across all non-current users
-    val filteredSearchResults = remember(searchQuery, globalLeaderboard, currentUserId) {
-        if (searchQuery.isBlank()) emptyList()
-        else {
-            globalLeaderboard.filter {
-                it.userId != currentUserId &&
-                (it.username.contains(searchQuery.trim(), ignoreCase = true) ||
-                 it.email.contains(searchQuery.trim(), ignoreCase = true))
-            }
+    val myEmail = currentUserEmail.ifBlank {
+        globalLeaderboard.firstOrNull { it.userId == currentUserId }?.email ?: ""
+    }
+    val friendEmails = remember(friendsLeaderboard) { friendsLeaderboard.map { it.email }.toSet() }
+
+    // Debounced cloud search (waits 400ms after user stops typing)
+    LaunchedEffect(searchQuery) {
+        searchJob?.cancel()
+        if (searchQuery.isBlank()) {
+            cloudSearchResults = emptyList()
+            isSearching = false
+            return@LaunchedEffect
         }
+        isSearching = true
+        delay(400)
+        val cloud = SupabaseClient.searchUsers(searchQuery.trim(), myEmail)
+        val localMatches = globalLeaderboard.filter {
+            it.userId != currentUserId && it.email != myEmail &&
+            (it.username.contains(searchQuery.trim(), ignoreCase = true) ||
+             it.email.contains(searchQuery.trim(), ignoreCase = true))
+        }
+        val cloudEmails = cloud.map { it.email }.toSet()
+        val merged = cloud + localMatches.filter { it.email !in cloudEmails }
+        cloudSearchResults = merged
+        isSearching = false
     }
 
     Column(
@@ -103,15 +130,15 @@ fun LeaderboardScreen(
                 text = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Teman", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        if (friendsLeaderboard.size > 1) { // includes self
+                        if (pendingRequests.isNotEmpty()) {
                             Spacer(modifier = Modifier.width(6.dp))
                             Box(
                                 modifier = Modifier
-                                    .background(NeonGreen, CircleShape)
+                                    .background(StreakOrange, CircleShape)
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    "${friendsLeaderboard.size - 1}",
+                                    "${pendingRequests.size}",
                                     color = DeepNavy,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold
@@ -121,6 +148,76 @@ fun LeaderboardScreen(
                     }
                 }
             )
+        }
+
+        // Incoming Friend Requests Section (on Friends Tab)
+        if (selectedTab == 1 && pendingRequests.isNotEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CardSurface),
+                border = BorderStroke(1.dp, NeonGreen.copy(alpha = 0.4f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.PersonAdd, contentDescription = null, tint = NeonGreen, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Permintaan Pertemanan (${pendingRequests.size})",
+                            fontWeight = FontWeight.Bold,
+                            color = NeonGreen,
+                            fontSize = 14.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    pendingRequests.forEach { sender ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(NeonGreen.copy(alpha = 0.2f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    (sender.username.firstOrNull()?.uppercaseChar() ?: '?').toString(),
+                                    fontWeight = FontWeight.Bold,
+                                    color = NeonGreen
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(sender.username, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
+                                Text("Ingin menjadi temanmu", color = TextMuted, fontSize = 11.sp)
+                            }
+                            Button(
+                                onClick = { onAcceptRequest(sender) },
+                                shape = RoundedCornerShape(20.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
+                            ) {
+                                Text("Terima", color = DeepNavy, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            OutlinedButton(
+                                onClick = { onRejectRequest(sender) },
+                                shape = RoundedCornerShape(20.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed),
+                                border = BorderStroke(1.dp, DangerRed)
+                            ) {
+                                Text("Tolak", color = DangerRed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Search & Add Friend bar on Friends Tab
@@ -164,10 +261,24 @@ fun LeaderboardScreen(
                         )
                     )
 
-                    // Display Live Search Results if search is active
+                    // Display Cloud Search Results if search is active
                     if (searchQuery.isNotBlank()) {
                         Spacer(modifier = Modifier.height(12.dp))
-                        if (filteredSearchResults.isEmpty()) {
+                        if (isSearching) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = NeonGreen,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Mencari...", color = TextMuted, fontSize = 12.sp)
+                            }
+                        } else if (cloudSearchResults.isEmpty()) {
                             Text(
                                 "Tidak ada pengguna dengan nama '$searchQuery'",
                                 color = TextMuted,
@@ -176,17 +287,21 @@ fun LeaderboardScreen(
                             )
                         } else {
                             Text(
-                                "Hasil Pencarian (${filteredSearchResults.size})",
+                                "Hasil Pencarian (${cloudSearchResults.size})",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = NeonGreen
                             )
                             Spacer(modifier = Modifier.height(6.dp))
-                            filteredSearchResults.forEach { user ->
+                            cloudSearchResults.forEach { user ->
+                                val isFriend = friendUserIds.contains(user.userId) || (user.email.isNotBlank() && friendEmails.contains(user.email))
+                                val isPendingSent = sentRequestEmails.contains(user.email)
                                 UserAddCard(
                                     user = user,
-                                    isFriend = friendUserIds.contains(user.userId),
-                                    onToggle = { onToggleFriend(user) }
+                                    isFriend = isFriend,
+                                    isPendingSent = isPendingSent,
+                                    onSendRequest = { onSendRequest(user) },
+                                    onRemoveFriend = { onRemoveFriend(user) }
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                             }
@@ -207,10 +322,14 @@ fun LeaderboardScreen(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 suggestedFriends.take(3).forEach { user ->
+                    val isFriend = friendUserIds.contains(user.userId) || (user.email.isNotBlank() && friendEmails.contains(user.email))
+                    val isPendingSent = sentRequestEmails.contains(user.email)
                     UserAddCard(
                         user = user,
-                        isFriend = friendUserIds.contains(user.userId),
-                        onToggle = { onToggleFriend(user) }
+                        isFriend = isFriend,
+                        isPendingSent = isPendingSent,
+                        onSendRequest = { onSendRequest(user) },
+                        onRemoveFriend = { onRemoveFriend(user) }
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                 }
@@ -233,7 +352,7 @@ fun LeaderboardScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "Belum ada teman berteman. Tambahkan dari rekomendasi di atas!",
+                    "Belum ada teman berteman. Cari & kirim permintaan pertemanan di atas!",
                     color = TextSecondary,
                     textAlign = TextAlign.Center,
                     fontSize = 13.sp,
@@ -254,12 +373,16 @@ fun LeaderboardScreen(
                 val restList = if (activeList.size > 3) activeList.drop(3) else activeList
                 itemsIndexed(restList) { index, user ->
                     val rank = if (activeList.size > 3) index + 4 else index + 1
+                    val isFriend = friendUserIds.contains(user.userId) || (user.email.isNotBlank() && friendEmails.contains(user.email))
+                    val isPendingSent = sentRequestEmails.contains(user.email)
                     LeaderboardRow(
                         rank = rank,
                         user = user,
-                        isCurrentUser = user.userId == currentUserId,
-                        isFriend = friendUserIds.contains(user.userId),
-                        onToggleFriend = { onToggleFriend(user) }
+                        isCurrentUser = user.userId == currentUserId || (myEmail.isNotBlank() && user.email == myEmail),
+                        isFriend = isFriend,
+                        isPendingSent = isPendingSent,
+                        onSendRequest = { onSendRequest(user) },
+                        onRemoveFriend = { onRemoveFriend(user) }
                     )
                 }
                 item { Spacer(modifier = Modifier.height(80.dp)) }
@@ -272,7 +395,9 @@ fun LeaderboardScreen(
 fun UserAddCard(
     user: UserEntity,
     isFriend: Boolean,
-    onToggle: () -> Unit
+    isPendingSent: Boolean = false,
+    onSendRequest: () -> Unit = {},
+    onRemoveFriend: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -300,20 +425,38 @@ fun UserAddCard(
                 Text(user.username, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
                 Text("${user.totalPoints} pts • ${user.currentStreak} hari streak", color = TextMuted, fontSize = 11.sp)
             }
-            Button(
-                onClick = onToggle,
-                shape = RoundedCornerShape(20.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isFriend) DangerRed.copy(alpha = 0.2f) else NeonGreen,
-                    contentColor = if (isFriend) DangerRed else DeepNavy
-                )
-            ) {
-                Text(
-                    text = if (isFriend) "Hapus" else "+ Tambah",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
-                )
+            when {
+                isFriend -> {
+                    Button(
+                        onClick = onRemoveFriend,
+                        shape = RoundedCornerShape(20.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = DangerRed.copy(alpha = 0.2f), contentColor = DangerRed)
+                    ) {
+                        Text("Hapus", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+                isPendingSent -> {
+                    OutlinedButton(
+                        onClick = onRemoveFriend, // click cancels request
+                        shape = RoundedCornerShape(20.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = StreakOrange),
+                        border = BorderStroke(1.dp, StreakOrange)
+                    ) {
+                        Text("Menunggu...", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+                else -> {
+                    Button(
+                        onClick = onSendRequest,
+                        shape = RoundedCornerShape(20.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonGreen, contentColor = DeepNavy)
+                    ) {
+                        Text("+ Tambah", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
             }
         }
     }
@@ -419,7 +562,9 @@ fun LeaderboardRow(
     user: UserEntity,
     isCurrentUser: Boolean,
     isFriend: Boolean = false,
-    onToggleFriend: () -> Unit = {}
+    isPendingSent: Boolean = false,
+    onSendRequest: () -> Unit = {},
+    onRemoveFriend: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -427,7 +572,7 @@ fun LeaderboardRow(
         colors = CardDefaults.cardColors(
             containerColor = if (isCurrentUser) NeonGreen.copy(alpha = 0.1f) else CardSurface
         ),
-        border = if (isCurrentUser) androidx.compose.foundation.BorderStroke(1.dp, NeonGreen.copy(alpha = 0.4f)) else null
+        border = if (isCurrentUser) BorderStroke(1.dp, NeonGreen.copy(alpha = 0.4f)) else null
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -474,30 +619,61 @@ fun LeaderboardRow(
                 fontSize = 14.sp
             )
             Spacer(modifier = Modifier.width(8.dp))
-            if (!isCurrentUser) {
-                IconButton(
-                    onClick = onToggleFriend,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isFriend) Icons.Default.PersonRemove else Icons.Default.PersonAdd,
-                        contentDescription = if (isFriend) "Hapus Teman" else "Tambah Teman",
-                        tint = if (isFriend) DangerRed else NeonGreen,
-                        modifier = Modifier.size(20.dp)
-                    )
+            when {
+                isCurrentUser -> {
+                    Surface(
+                        color = NeonGreen.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            "Kamu",
+                            color = NeonGreen,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
                 }
-            } else {
-                Surface(
-                    color = NeonGreen.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        "Kamu",
-                        color = NeonGreen,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                isFriend -> {
+                    IconButton(
+                        onClick = onRemoveFriend,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PersonRemove,
+                            contentDescription = "Hapus Teman",
+                            tint = DangerRed,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                isPendingSent -> {
+                    Surface(
+                        color = StreakOrange.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.clickable { onRemoveFriend() }
+                    ) {
+                        Text(
+                            "Menunggu",
+                            color = StreakOrange,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+                else -> {
+                    IconButton(
+                        onClick = onSendRequest,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PersonAdd,
+                            contentDescription = "Kirim Permintaan",
+                            tint = NeonGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }

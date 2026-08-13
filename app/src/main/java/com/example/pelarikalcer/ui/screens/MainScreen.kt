@@ -78,8 +78,6 @@ val bottomNavItems = listOf(
 @Composable
 fun MainScreen(
     userId: Int,
-    showTutorial: Boolean,
-    onTutorialDone: () -> Unit,
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
@@ -120,12 +118,80 @@ fun MainScreen(
     // ViewModels
     val mainVm: MainViewModel = viewModel(factory = MainViewModelFactory(db.userDao(), db.runDao(), db.challengeDao(), userId))
     val mainState by mainVm.state.collectAsStateWithLifecycle()
-    // Leaderboards
-    val globalLeaderboard by db.userDao().getLeaderboard().collectAsStateWithLifecycle(emptyList())
+    // Leaderboards (local Room)
+    val localLeaderboard by db.userDao().getLeaderboard().collectAsStateWithLifecycle(emptyList())
     val friendsLeaderboard by db.userDao().getFriendsLeaderboard(userId).collectAsStateWithLifecycle(emptyList())
     val suggestedFriends by db.userDao().getSuggestedFriends(userId).collectAsStateWithLifecycle(emptyList())
     val friendUserIdsList by db.userDao().getFriendUserIds(userId).collectAsStateWithLifecycle(emptyList())
     val friendUserIds = remember(friendUserIdsList) { friendUserIdsList.toSet() }
+
+    // Cloud leaderboard & Cloud Friends from Supabase
+    var cloudLeaderboard by remember { mutableStateOf<List<com.example.pelarikalcer.data.local.entity.UserEntity>>(emptyList()) }
+    var cloudAcceptedFriends by remember { mutableStateOf<List<com.example.pelarikalcer.data.local.entity.UserEntity>>(emptyList()) }
+    var pendingRequests by remember { mutableStateOf<List<com.example.pelarikalcer.data.local.entity.UserEntity>>(emptyList()) }
+    var sentRequestEmails by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val myEmail = mainState.user?.email ?: ""
+
+    // Live background polling (syncs every 3s automatically across devices without relog)
+    LaunchedEffect(myEmail) {
+        if (myEmail.isNotBlank()) {
+            while (true) {
+                try {
+                    val cloud = com.example.pelarikalcer.data.remote.SupabaseClient.fetchGlobalLeaderboard()
+                    if (cloud.isNotEmpty()) cloudLeaderboard = cloud
+                    pendingRequests = com.example.pelarikalcer.data.remote.SupabaseClient.fetchPendingRequests(myEmail)
+                    sentRequestEmails = com.example.pelarikalcer.data.remote.SupabaseClient.fetchSentRequestEmails(myEmail)
+                    cloudAcceptedFriends = com.example.pelarikalcer.data.remote.SupabaseClient.fetchAcceptedFriends(myEmail)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+                kotlinx.coroutines.delay(3000)
+            }
+        }
+    }
+
+    // Merge local + cloud: deduplicate strictly by email and username so no double cards appear
+    val globalLeaderboard = remember(localLeaderboard, cloudLeaderboard) {
+        val cloudEmails = cloudLeaderboard.mapNotNull { it.email.takeIf { e -> e.isNotBlank() }?.lowercase() }.toSet()
+        val cloudUsernames = cloudLeaderboard.map { it.username.lowercase() }.toSet()
+        val localOnly = localLeaderboard.filter { localUser ->
+            val emailMatch = localUser.email.isNotBlank() && localUser.email.lowercase() in cloudEmails
+            val usernameMatch = localUser.username.lowercase() in cloudUsernames
+            !emailMatch && !usernameMatch
+        }
+        (cloudLeaderboard + localOnly).sortedByDescending { it.totalPoints }
+    }
+
+    // Merge local friends + cloud accepted friends for Friends tab
+    val mergedFriendsLeaderboard = remember(friendsLeaderboard, cloudAcceptedFriends, mainState.user) {
+        val list = mutableListOf<com.example.pelarikalcer.data.local.entity.UserEntity>()
+        val existingEmails = mutableSetOf<String>()
+        val existingUserIds = mutableSetOf<Int>()
+
+        mainState.user?.let { user ->
+            list.add(user)
+            existingUserIds.add(user.userId)
+            if (user.email.isNotBlank()) existingEmails.add(user.email.lowercase())
+        }
+
+        friendsLeaderboard.forEach { friend ->
+            val notInIds = friend.userId !in existingUserIds
+            val notInEmails = friend.email.isBlank() || friend.email.lowercase() !in existingEmails
+            if (notInIds && notInEmails) {
+                list.add(friend)
+                existingUserIds.add(friend.userId)
+                if (friend.email.isNotBlank()) existingEmails.add(friend.email.lowercase())
+            }
+        }
+
+        cloudAcceptedFriends.forEach { friend ->
+            if (friend.email.isNotBlank() && friend.email.lowercase() !in existingEmails) {
+                list.add(friend)
+                existingEmails.add(friend.email.lowercase())
+            }
+        }
+        list.sortedByDescending { it.totalPoints }
+    }
 
     val runVm: RunViewModel = viewModel(
         factory = RunViewModelFactory(
@@ -135,11 +201,13 @@ fun MainScreen(
         )
     )
 
-    // Auto-seed fake competitors for offline leaderboard (only once)
+    // Auto-seed fake competitors for offline leaderboard (only once, deduped by username)
     LaunchedEffect(Unit) {
-        val seedKey = "leaderboard_seeded"
+        val seedKey = "leaderboard_seeded_v2" // bumped version to re-run clean seed
         val prefs = context.getSharedPreferences("pelarikalcer_prefs", Context.MODE_PRIVATE)
         if (!prefs.getBoolean(seedKey, false)) {
+            // Delete old duplicates first
+            val fakeEmails = listOf("budi@fake.com", "siti@fake.com", "kalcer@fake.com", "alex@fake.com", "dian@fake.com")
             val fakeUsers = listOf(
                 com.example.pelarikalcer.data.local.entity.UserEntity(username = "BudiSantoso", email = "budi@fake.com", passwordHash = "x", totalPoints = 4200, currentStreak = 14, weightKg = 68.0),
                 com.example.pelarikalcer.data.local.entity.UserEntity(username = "SitiRun", email = "siti@fake.com", passwordHash = "x", totalPoints = 3100, currentStreak = 7, weightKg = 55.0),
@@ -147,7 +215,12 @@ fun MainScreen(
                 com.example.pelarikalcer.data.local.entity.UserEntity(username = "CoachAlex", email = "alex@fake.com", passwordHash = "x", totalPoints = 5800, currentStreak = 21, weightKg = 75.0),
                 com.example.pelarikalcer.data.local.entity.UserEntity(username = "DianFit", email = "dian@fake.com", passwordHash = "x", totalPoints = 1900, currentStreak = 3, weightKg = 58.0)
             )
-            fakeUsers.forEach { db.userDao().insertUser(it) }
+            fakeUsers.forEach { fake ->
+                // Only insert if username doesn't exist yet
+                if (db.userDao().getUserByUsername(fake.username) == null) {
+                    db.userDao().insertUser(fake)
+                }
+            }
             prefs.edit().putBoolean(seedKey, true).apply()
         }
     }
@@ -239,24 +312,52 @@ fun MainScreen(
                             )
                             "leaderboard" -> LeaderboardScreen(
                                 globalLeaderboard = globalLeaderboard,
-                                friendsLeaderboard = friendsLeaderboard,
+                                friendsLeaderboard = mergedFriendsLeaderboard,
                                 suggestedFriends = suggestedFriends,
+                                pendingRequests = pendingRequests,
+                                sentRequestEmails = sentRequestEmails,
                                 friendUserIds = friendUserIds,
                                 currentUserId = userId,
-                                onToggleFriend = { targetUser ->
+                                currentUserEmail = myEmail,
+                                onSendRequest = { targetUser ->
                                     scope.launch {
-                                        if (friendUserIds.contains(targetUser.userId)) {
+                                        if (myEmail.isNotBlank() && targetUser.email.isNotBlank()) {
+                                            com.example.pelarikalcer.data.remote.SupabaseClient.sendFriendRequest(myEmail, targetUser.email)
+                                            sentRequestEmails = sentRequestEmails + targetUser.email
+                                        }
+                                    }
+                                },
+                                onAcceptRequest = { senderUser ->
+                                    scope.launch {
+                                        if (myEmail.isNotBlank() && senderUser.email.isNotBlank()) {
+                                            com.example.pelarikalcer.data.remote.SupabaseClient.acceptFriendRequest(myEmail, senderUser.email)
+                                            pendingRequests = pendingRequests.filter { it.email != senderUser.email }
+                                            if (senderUser.userId > 0) {
+                                                db.userDao().insertFriend(com.example.pelarikalcer.data.local.entity.FriendEntity(userId, senderUser.userId))
+                                                db.userDao().insertFriend(com.example.pelarikalcer.data.local.entity.FriendEntity(senderUser.userId, userId))
+                                            }
+                                            // Instant refresh of accepted friends
+                                            cloudAcceptedFriends = com.example.pelarikalcer.data.remote.SupabaseClient.fetchAcceptedFriends(myEmail)
+                                        }
+                                    }
+                                },
+                                onRejectRequest = { senderUser ->
+                                    scope.launch {
+                                        if (myEmail.isNotBlank() && senderUser.email.isNotBlank()) {
+                                            com.example.pelarikalcer.data.remote.SupabaseClient.removeFriend(myEmail, senderUser.email)
+                                            pendingRequests = pendingRequests.filter { it.email != senderUser.email }
+                                        }
+                                    }
+                                },
+                                onRemoveFriend = { targetUser ->
+                                    scope.launch {
+                                        if (targetUser.userId > 0) {
                                             db.userDao().removeFriend(userId, targetUser.userId)
-                                            com.example.pelarikalcer.data.remote.SupabaseClient.removeFriend(userId, targetUser.userId)
-                                        } else {
-                                            db.userDao().insertFriend(
-                                                com.example.pelarikalcer.data.local.entity.FriendEntity(userId, targetUser.userId)
-                                            )
-                                            db.userDao().insertFriend(
-                                                com.example.pelarikalcer.data.local.entity.FriendEntity(targetUser.userId, userId)
-                                            )
-                                            com.example.pelarikalcer.data.remote.SupabaseClient.addFriend(userId, targetUser.userId)
-                                            com.example.pelarikalcer.data.remote.SupabaseClient.addFriend(targetUser.userId, userId)
+                                        }
+                                        if (myEmail.isNotBlank() && targetUser.email.isNotBlank()) {
+                                            com.example.pelarikalcer.data.remote.SupabaseClient.removeFriend(myEmail, targetUser.email)
+                                            sentRequestEmails = sentRequestEmails - targetUser.email
+                                            cloudAcceptedFriends = com.example.pelarikalcer.data.remote.SupabaseClient.fetchAcceptedFriends(myEmail)
                                         }
                                     }
                                 }
@@ -361,10 +462,6 @@ fun MainScreen(
             }
         }
 
-        // Tutorial overlay (first login)
-        if (showTutorial) {
-            TutorialOverlay(onFinish = onTutorialDone)
-        }
     }
 }
 

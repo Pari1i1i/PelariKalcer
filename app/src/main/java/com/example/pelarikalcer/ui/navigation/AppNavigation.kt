@@ -12,7 +12,6 @@ import com.example.pelarikalcer.data.local.AppDatabase
 import com.example.pelarikalcer.data.repository.UserRepository
 import com.example.pelarikalcer.ui.screens.MainScreen
 import com.example.pelarikalcer.ui.screens.SplashScreen
-import com.example.pelarikalcer.ui.screens.TutorialOverlay
 import com.example.pelarikalcer.ui.screens.auth.AuthState
 import com.example.pelarikalcer.ui.screens.auth.AuthViewModel
 import com.example.pelarikalcer.ui.screens.auth.AuthViewModelFactory
@@ -20,8 +19,6 @@ import com.example.pelarikalcer.ui.screens.auth.LoginScreen
 import com.example.pelarikalcer.ui.screens.auth.RegisterScreen
 import com.example.pelarikalcer.ui.screens.onboarding.OnboardingScreen
 import com.example.pelarikalcer.ui.screens.onboarding.isOnboardingDone
-import com.example.pelarikalcer.ui.screens.setTutorialDone
-import com.example.pelarikalcer.ui.screens.isTutorialDone
 import com.example.pelarikalcer.ui.screens.profile.SetupProfileScreen
 import kotlinx.coroutines.launch
 
@@ -42,7 +39,7 @@ fun AppNavigation() {
             if (prefs.contains("logged_in_user_id")) prefs.getInt("logged_in_user_id", -1).takeIf { it != -1 } else null
         )
     }
-    var showTutorial by remember { mutableStateOf(!isTutorialDone(context)) }
+
 
     LaunchedEffect(authState) {
         when (val s = authState) {
@@ -55,7 +52,6 @@ fun AppNavigation() {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 } else {
-                    showTutorial = !isTutorialDone(context)
                     navController.navigate(Screen.Main.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
@@ -121,7 +117,6 @@ fun AppNavigation() {
                                 database.userDao().updateUser(
                                     user.copy(weightKg = w, heightCm = h)
                                 )
-                                showTutorial = !isTutorialDone(context)
                                 navController.navigate(Screen.Main.route) {
                                     popUpTo(Screen.SetupProfile.route) { inclusive = true }
                                 }
@@ -137,15 +132,9 @@ fun AppNavigation() {
             if (uid != null) {
                 MainScreen(
                     userId = uid,
-                    showTutorial = showTutorial,
-                    onTutorialDone = {
-                        setTutorialDone(context)
-                        showTutorial = false
-                    },
                     onLogout = {
                         prefs.edit().remove("logged_in_user_id").apply()
                         loggedInUserId = null
-                        showTutorial = false
                         navController.navigate(Screen.Login.route) {
                             popUpTo(Screen.Main.route) { inclusive = true }
                         }
