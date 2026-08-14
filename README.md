@@ -40,10 +40,9 @@
 ## 📱 Tampilan Aplikasi
 
 <div align="center">
-  <!-- Ganti URL gambar di bawah dengan screenshot/GIF asli aplikasi PelariKalcer -->
-  <img src="https://via.placeholder.com/260x540.png?text=Main+Screen" width="30%" />
-  <img src="https://via.placeholder.com/260x540.png?text=Leaderboard+Screen" width="30%" />
-  <img src="https://via.placeholder.com/260x540.png?text=Add+Friends+Screen" width="30%" />
+  <img src="[https://via.placeholder.com/260x540.png?text=Main+Screen](https://via.placeholder.com/260x540.png?text=Main+Screen)" width="30%" />
+  <img src="[https://via.placeholder.com/260x540.png?text=Leaderboard+Screen](https://via.placeholder.com/260x540.png?text=Leaderboard+Screen)" width="30%" />
+  <img src="[https://via.placeholder.com/260x540.png?text=Add+Friends+Screen](https://via.placeholder.com/260x540.png?text=Add+Friends+Screen)" width="30%" />
 </div>
 
 ---
@@ -51,8 +50,8 @@
 ## 🛠️ Tech Stack
 
 <div align="center">
-  <a href="https://skillicons.dev">
-    <img src="https://skillicons.dev/icons?i=kotlin,androidstudio,supabase,gradle,figma,git" />
+  <a href="[https://skillicons.dev](https://skillicons.dev)">
+    <img src="[https://skillicons.dev/icons?i=kotlin,androidstudio,supabase,gradle,figma,git](https://skillicons.dev/icons?i=kotlin,androidstudio,supabase,gradle,figma,git)" />
   </a>
 </div>
 
@@ -83,4 +82,3 @@ app/src/main/java/com/example/pelarikalcer/
 │       ├── main/         # Main Dashboard
 │       └── friends/      # Add Friends & Friend List
 └── util/              # Helper & Constants
-
