@@ -50,8 +50,8 @@
 ## 🛠️ Tech Stack
 
 <div align="center">
-  <a href="[https://skillicons.dev](https://skillicons.dev)">
-    <img src="[https://skillicons.dev/icons?i=kotlin,androidstudio,supabase,gradle,figma,git](https://skillicons.dev/icons?i=kotlin,androidstudio,supabase,gradle,figma,git)" />
+  <a href="https://skillicons.dev">
+    <img src="https://skillicons.dev/icons?i=kotlin,androidstudio,supabase,postgres,gradle,figma,git,github" />
   </a>
 </div>
 
@@ -62,7 +62,6 @@
 * **Backend / Database**: Supabase (PostgreSQL, Realtime, Auth)
 * **Architecture**: MVVM / Clean Architecture
 * **Asynchronous**: Kotlin Coroutines & Flow
-
 ---
 
 ## 📁 Struktur Folder Proyek
