@@ -84,26 +84,33 @@ app/src/main/java/com/example/pelarikalcer/
 └── util/              # Helper & Constants
 ```
 </details> 
+---
 
-🚀 Cara Menjalankan (Getting Started)
-Clone Repository Ini
+## 🚀 Cara Menjalankan (Getting Started)
 
-Bash
-git clone [https://github.com/Pari1i1i/PelariKalcer.git](https://github.com/Pari1i1i/PelariKalcer.git)
-Buka di Android Studio
+1. **Clone Repository Ini**
+   ```bash
+   git clone [https://github.com/Pari1i1i/PelariKalcer.git](https://github.com/Pari1i1i/PelariKalcer.git)
+   ```
 
-Buka Android Studio (versi Ladybug/terbaru direkomendasikan).
+2. **Buka di Android Studio**
+   * Buka Android Studio.
+   * Pilih **Open** lalu arahkan ke folder proyek `PelariKalcer`.
 
-Pilih Open lalu arahkan ke folder proyek PelariKalcer.
+3. **Konfigurasi Supabase**
+   * Buka file `SupabaseClient.kt` di `data/remote/`.
+   * Pastikan kredensial Supabase kamu sudah terpasang:
+   ```kotlin
+   val SUPABASE_URL = "https://YOUR_SUPABASE_PROJECT.supabase.co"
+   val SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY"
+   ```
 
-Konfigurasi Supabase
-Buka file SupabaseClient.kt di data/remote/ dan pastikan kredensial Supabase kamu sudah terpasang:
+4. **Build & Run**
+   * Lakukan Sync Gradle (`Sync Project with Gradle Files`).
+   * Jalankan di Emulator atau Device Fisik (`Shift + F10`).
 
-Kotlin
-val SUPABASE_URL = "https://YOUR_SUPABASE_PROJECT.supabase.co"
-val SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY"
-Build & Run
+---
 
-Lakukan Sync Gradle (Sync Project with Gradle Files).
-
-Jalankan di Emulator atau Device Fisik (Shift + F10).
+<div align="center">
+  Dibuat dengan 🏃‍♂️ oleh <a href="https://github.com/Pari1i1i">Pari1i1i</a>
+</div>
