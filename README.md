@@ -40,9 +40,9 @@
 ## 📱 Tampilan Aplikasi
 
 <div align="center">
-  <img src="[https://via.placeholder.com/260x540.png?text=Main+Screen](https://via.placeholder.com/260x540.png?text=Main+Screen)" width="30%" />
-  <img src="[https://via.placeholder.com/260x540.png?text=Leaderboard+Screen](https://via.placeholder.com/260x540.png?text=Leaderboard+Screen)" width="30%" />
-  <img src="[https://via.placeholder.com/260x540.png?text=Add+Friends+Screen](https://via.placeholder.com/260x540.png?text=Add+Friends+Screen)" width="30%" />
+  <img alt="image" src="https://github.com/user-attachments/assets/d230fa96-aa0f-46be-9a74-f06713bb6aaf" width = 30%/>
+  <img width="30%" alt="image" src="https://github.com/user-attachments/assets/bbad6aa3-deed-4dee-8e12-ad8db4006435" />
+<img width="30%" alt="image" src="https://github.com/user-attachments/assets/6b60a9f4-40b1-4169-9748-ac8a6d577ea2" />
 </div>
 
 ---
@@ -69,7 +69,8 @@
 
 <details>
 <summary>Struktur folder</summary>
-
+  
+```text
 app/src/main/java/com/example/pelarikalcer/
 ├── data/
 │   ├── remote/        # SupabaseClient & API Service
@@ -81,7 +82,8 @@ app/src/main/java/com/example/pelarikalcer/
 │       ├── main/         # Main Dashboard
 │       └── friends/      # Add Friends & Friend List
 └── util/              # Helper & Constants
-</details>
+```
+</details> 
 
 🚀 Cara Menjalankan (Getting Started)
 Clone Repository Ini
