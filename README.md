@@ -68,9 +68,8 @@
 ## 📁 Struktur Folder Proyek
 
 <details>
-<summary>🔍 Klik untuk melihat struktur folder</summary>
+<summary>Struktur folder</summary>
 
-```text
 app/src/main/java/com/example/pelarikalcer/
 ├── data/
 │   ├── remote/        # SupabaseClient & API Service
@@ -82,3 +81,27 @@ app/src/main/java/com/example/pelarikalcer/
 │       ├── main/         # Main Dashboard
 │       └── friends/      # Add Friends & Friend List
 └── util/              # Helper & Constants
+</details>
+
+🚀 Cara Menjalankan (Getting Started)
+Clone Repository Ini
+
+Bash
+git clone [https://github.com/Pari1i1i/PelariKalcer.git](https://github.com/Pari1i1i/PelariKalcer.git)
+Buka di Android Studio
+
+Buka Android Studio (versi Ladybug/terbaru direkomendasikan).
+
+Pilih Open lalu arahkan ke folder proyek PelariKalcer.
+
+Konfigurasi Supabase
+Buka file SupabaseClient.kt di data/remote/ dan pastikan kredensial Supabase kamu sudah terpasang:
+
+Kotlin
+val SUPABASE_URL = "https://YOUR_SUPABASE_PROJECT.supabase.co"
+val SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY"
+Build & Run
+
+Lakukan Sync Gradle (Sync Project with Gradle Files).
+
+Jalankan di Emulator atau Device Fisik (Shift + F10).
