@@ -142,8 +142,8 @@ fun RunSummaryScreen(
                     border = BorderStroke(1.dp, NeonGreen.copy(alpha = 0.4f))
                 ) {
                     Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.Start
                     ) {
                         Text("JARAK TEMPUH", fontSize = 10.sp, color = TextMuted, letterSpacing = 3.sp)
                         Spacer(modifier = Modifier.height(4.dp))
