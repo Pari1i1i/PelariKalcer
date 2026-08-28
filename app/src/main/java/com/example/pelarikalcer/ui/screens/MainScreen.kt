@@ -41,14 +41,11 @@ import com.example.pelarikalcer.ui.screens.run.ActiveRunScreen
 import com.example.pelarikalcer.ui.screens.run.RunSummaryScreen
 import com.example.pelarikalcer.ui.screens.run.RunViewModel
 import com.example.pelarikalcer.ui.screens.run.RunViewModelFactory
-import com.example.pelarikalcer.ui.screens.shop.PetShopScreen
-import com.example.pelarikalcer.ui.screens.shop.LottiePet
-import com.example.pelarikalcer.ui.screens.shop.availablePets
+import com.example.pelarikalcer.ui.screens.shop.FullPetScreen
 import com.example.pelarikalcer.ui.theme.*
 import kotlinx.coroutines.launch
 import org.osmdroid.util.GeoPoint
 import com.google.android.gms.location.LocationServices
-import com.example.pelarikalcer.ui.screens.run.OsmMap
 import androidx.compose.ui.text.style.TextAlign
 import com.example.pelarikalcer.ui.screens.run.RunScreen
 
@@ -62,6 +59,7 @@ sealed class BottomNavItem(
 ) {
     object Home : BottomNavItem("home", "Beranda", Icons.Filled.Home, Icons.Outlined.Home)
     object Run : BottomNavItem("run", "Lari", Icons.Filled.DirectionsRun, Icons.Outlined.DirectionsRun)
+    object Pet : BottomNavItem("pet", "Pet", Icons.Filled.Pets, Icons.Outlined.Pets)
     object Challenges : BottomNavItem("challenges", "Tantangan", Icons.Filled.EmojiEvents, Icons.Outlined.EmojiEvents)
     object Leaderboard : BottomNavItem("leaderboard", "Papan", Icons.Filled.Leaderboard, Icons.Outlined.Leaderboard)
     object Profile : BottomNavItem("profile", "Profil", Icons.Filled.Person, Icons.Outlined.Person)
@@ -70,6 +68,7 @@ sealed class BottomNavItem(
 val bottomNavItems = listOf(
     BottomNavItem.Home,
     BottomNavItem.Run,
+    BottomNavItem.Pet,
     BottomNavItem.Challenges,
     BottomNavItem.Leaderboard,
     BottomNavItem.Profile
@@ -87,37 +86,27 @@ fun MainScreen(
     var currentRoute by remember { mutableStateOf("home") }
     var showAiCoach by remember { mutableStateOf(false) }
     var showRunSummary by remember { mutableStateOf(false) }
-    var showPetShop by remember { mutableStateOf(false) }
-
-    // Persistent storage for Pets (offline fallback)
-    val sharedPrefs = remember { context.getSharedPreferences("pelarikalcer_prefs", Context.MODE_PRIVATE) }
-    var ownedPetIds by remember {
-        mutableStateOf(
-            sharedPrefs.getStringSet("owned_pet_ids_$userId", setOf("1"))?.mapNotNull { it.toIntOrNull() } ?: listOf(1)
-        )
-    }
-    var equippedPetId by remember {
-        mutableStateOf(
-            if (sharedPrefs.contains("equipped_pet_id_$userId")) sharedPrefs.getInt("equipped_pet_id_$userId", 1) else 1
-        )
-    }
-
-    val equippedPet = remember(equippedPetId) {
-        availablePets.find { it.id == equippedPetId } ?: availablePets.first()
-    }
 
     // Physical Back Button Interception
-    BackHandler(enabled = showPetShop || showAiCoach || currentRoute != "home") {
+    BackHandler(enabled = showAiCoach || currentRoute != "home") {
         when {
-            showPetShop -> showPetShop = false
             showAiCoach -> showAiCoach = false
             currentRoute != "home" -> currentRoute = "home"
         }
     }
 
     // ViewModels
-    val mainVm: MainViewModel = viewModel(factory = MainViewModelFactory(db.userDao(), db.runDao(), db.challengeDao(), userId))
+    val mainVm: MainViewModel = viewModel(
+        factory = MainViewModelFactory(
+            userDao = db.userDao(),
+            runDao = db.runDao(),
+            challengeDao = db.challengeDao(),
+            petDao = db.petDao(),
+            userId = userId
+        )
+    )
     val mainState by mainVm.state.collectAsStateWithLifecycle()
+
     // Leaderboards (local Room)
     val localLeaderboard by db.userDao().getLeaderboard().collectAsStateWithLifecycle(emptyList())
     val friendsLeaderboard by db.userDao().getFriendsLeaderboard(userId).collectAsStateWithLifecycle(emptyList())
@@ -132,7 +121,7 @@ fun MainScreen(
     var sentRequestEmails by remember { mutableStateOf<Set<String>>(emptySet()) }
     val myEmail = mainState.user?.email ?: ""
 
-    // Live background polling (syncs every 3s automatically across devices without relog)
+    // Live background polling
     LaunchedEffect(myEmail) {
         if (myEmail.isNotBlank()) {
             while (true) {
@@ -143,14 +132,13 @@ fun MainScreen(
                     sentRequestEmails = com.example.pelarikalcer.data.remote.SupabaseClient.fetchSentRequestEmails(myEmail)
                     cloudAcceptedFriends = com.example.pelarikalcer.data.remote.SupabaseClient.fetchAcceptedFriends(myEmail)
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    // Safe network error absorption
                 }
-                kotlinx.coroutines.delay(3000)
+                kotlinx.coroutines.delay(4000)
             }
         }
     }
 
-    // Merge local + cloud: deduplicate strictly by email and username so no double cards appear
     val globalLeaderboard = remember(localLeaderboard, cloudLeaderboard) {
         val cloudEmails = cloudLeaderboard.mapNotNull { it.email.takeIf { e -> e.isNotBlank() }?.lowercase() }.toSet()
         val cloudUsernames = cloudLeaderboard.map { it.username.lowercase() }.toSet()
@@ -162,7 +150,6 @@ fun MainScreen(
         (cloudLeaderboard + localOnly).sortedByDescending { it.totalPoints }
     }
 
-    // Merge local friends + cloud accepted friends for Friends tab
     val mergedFriendsLeaderboard = remember(friendsLeaderboard, cloudAcceptedFriends, mainState.user) {
         val list = mutableListOf<com.example.pelarikalcer.data.local.entity.UserEntity>()
         val existingEmails = mutableSetOf<String>()
@@ -201,13 +188,10 @@ fun MainScreen(
         )
     )
 
-    // Auto-seed fake competitors for offline leaderboard (only once, deduped by username)
     LaunchedEffect(Unit) {
-        val seedKey = "leaderboard_seeded_v2" // bumped version to re-run clean seed
+        val seedKey = "leaderboard_seeded_v2"
         val prefs = context.getSharedPreferences("pelarikalcer_prefs", Context.MODE_PRIVATE)
         if (!prefs.getBoolean(seedKey, false)) {
-            // Delete old duplicates first
-            val fakeEmails = listOf("budi@fake.com", "siti@fake.com", "kalcer@fake.com", "alex@fake.com", "dian@fake.com")
             val fakeUsers = listOf(
                 com.example.pelarikalcer.data.local.entity.UserEntity(username = "BudiSantoso", email = "budi@fake.com", passwordHash = "x", totalPoints = 4200, currentStreak = 14, weightKg = 68.0),
                 com.example.pelarikalcer.data.local.entity.UserEntity(username = "SitiRun", email = "siti@fake.com", passwordHash = "x", totalPoints = 3100, currentStreak = 7, weightKg = 55.0),
@@ -216,7 +200,6 @@ fun MainScreen(
                 com.example.pelarikalcer.data.local.entity.UserEntity(username = "DianFit", email = "dian@fake.com", passwordHash = "x", totalPoints = 1900, currentStreak = 3, weightKg = 58.0)
             )
             fakeUsers.forEach { fake ->
-                // Only insert if username doesn't exist yet
                 if (db.userDao().getUserByUsername(fake.username) == null) {
                     db.userDao().insertUser(fake)
                 }
@@ -230,7 +213,6 @@ fun MainScreen(
         factory = AiCoachViewModelFactory(db.aiCoachDao(), userId, GEMINI_API_KEY)
     )
 
-    // Auto-sync user to Supabase Cloud when logged in or profile updates
     LaunchedEffect(mainState.user) {
         mainState.user?.let { user ->
             com.example.pelarikalcer.data.remote.SupabaseClient.upsertUser(user)
@@ -239,7 +221,9 @@ fun MainScreen(
 
     LaunchedEffect(runState.isFinished) {
         if (runState.isFinished) {
-            runState.savedRunId?.let { mainVm.processStreakAfterRun(runState.distanceKm) }
+            runState.savedRunId?.let {
+                mainVm.processRunCompletion(runState.distanceKm, runState.paceMinPerKm)
+            }
             showRunSummary = true
             mainState.user?.let { user ->
                 com.example.pelarikalcer.data.remote.SupabaseClient.upsertUser(user)
@@ -284,29 +268,28 @@ fun MainScreen(
                     ) {
                         when (currentRoute) {
                             "home" -> {
-                                // Add cute animated pet preview to DashboardScreen
-                                Box(modifier = Modifier.fillMaxSize()) {
-                                    DashboardScreen(
-                                        user = mainState.user,
-                                        recentRuns = mainState.recentRuns,
-                                        totalDistanceKm = mainState.totalDistanceKm,
-                                        totalCalories = mainState.totalCalories,
-                                        onStartRun = { currentRoute = "run" },
-                                        onOpenAiCoach = { showAiCoach = true }
-                                    )
-
-                                    // Display equipped animated pet in dashboard header corner
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(top = 80.dp, end = 20.dp)
-                                            .size(56.dp)
-                                    ) {
-                                        LottiePet(url = equippedPet.lottieUrl, modifier = Modifier.fillMaxSize())
-                                    }
-                                }
+                                DashboardScreen(
+                                    user = mainState.user,
+                                    recentRuns = mainState.recentRuns,
+                                    totalDistanceKm = mainState.totalDistanceKm,
+                                    totalCalories = mainState.totalCalories,
+                                    onStartRun = { currentRoute = "run" },
+                                    onOpenAiCoach = { showAiCoach = true }
+                                )
                             }
                             "run" -> PreRunScreen(onStart = { runVm.startRun() })
+                            "pet" -> {
+                                FullPetScreen(
+                                    activePet = mainState.activePet,
+                                    allPets = mainState.inventoryPets,
+                                    userPoints = mainState.user?.totalPoints ?: 0,
+                                    onRenamePet = mainVm::renamePet,
+                                    onFeedPet = mainVm::feedPetExp,
+                                    onSwapActivePet = mainVm::swapActivePet,
+                                    onGachaRoll = { mainVm.performGacha() },
+                                    onDirectBuy = { species -> mainVm.directBuyPet(species) }
+                                )
+                            }
                             "challenges" -> ChallengesScreen(
                                 totalDistanceKm = mainState.totalDistanceKm
                             )
@@ -336,7 +319,6 @@ fun MainScreen(
                                                 db.userDao().insertFriend(com.example.pelarikalcer.data.local.entity.FriendEntity(userId, senderUser.userId))
                                                 db.userDao().insertFriend(com.example.pelarikalcer.data.local.entity.FriendEntity(senderUser.userId, userId))
                                             }
-                                            // Instant refresh of accepted friends
                                             cloudAcceptedFriends = com.example.pelarikalcer.data.remote.SupabaseClient.fetchAcceptedFriends(myEmail)
                                         }
                                     }
@@ -363,26 +345,14 @@ fun MainScreen(
                                 }
                             )
                             "profile" -> {
-                                Box(modifier = Modifier.fillMaxSize()) {
-                                    ProfileScreen(
-                                        user = mainState.user,
-                                        totalDistanceKm = mainState.totalDistanceKm,
-                                        totalRuns = mainState.totalRuns,
-                                        totalCalories = mainState.totalCalories,
-                                        onLogout = onLogout,
-                                        onUpdateProfile = mainVm::updateProfile
-                                    )
-
-                                    // Display equipped pet anim next to avatar
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopCenter)
-                                            .padding(top = 130.dp, start = 80.dp)
-                                            .size(52.dp)
-                                    ) {
-                                        LottiePet(url = equippedPet.lottieUrl, modifier = Modifier.fillMaxSize())
-                                    }
-                                }
+                                ProfileScreen(
+                                    user = mainState.user,
+                                    totalDistanceKm = mainState.totalDistanceKm,
+                                    totalRuns = mainState.totalRuns,
+                                    totalCalories = mainState.totalCalories,
+                                    onLogout = onLogout,
+                                    onUpdateProfile = mainVm::updateProfile
+                                )
                             }
                         }
                     }
@@ -395,21 +365,6 @@ fun MainScreen(
             }
         }
 
-        // Pet Shop FAB on profile screen
-        if (currentRoute == "profile" && !showRunSummary && !(currentRoute == "run" && runState.isRunning)) {
-            FloatingActionButton(
-                onClick = { showPetShop = true },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 160.dp, end = 20.dp)
-                    .windowInsetsPadding(WindowInsets.statusBars),
-                containerColor = GoldStar,
-                contentColor = DeepNavy
-            ) {
-                Icon(Icons.Default.Pets, contentDescription = "Toko Pet", modifier = Modifier.size(24.dp))
-            }
-        }
-
         // AI Coach overlay
         AnimatedVisibility(
             visible = showAiCoach,
@@ -418,50 +373,6 @@ fun MainScreen(
         ) {
             AiCoachScreen(viewModel = aiCoachVm, onBack = { showAiCoach = false })
         }
-
-        // Pet Shop overlay
-        AnimatedVisibility(
-            visible = showPetShop,
-            enter = slideInVertically { it },
-            exit = slideOutVertically { it }
-        ) {
-            Box(modifier = Modifier.fillMaxSize().background(DeepNavy)) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { showPetShop = false }) {
-                            Icon(Icons.Default.ArrowBack, null, tint = TextPrimary)
-                        }
-                        Text("Kembali ke Profil", fontWeight = FontWeight.Bold, color = TextPrimary)
-                    }
-                    PetShopScreen(
-                        userPoints = mainState.user?.totalPoints ?: 0,
-                        ownedPetIds = ownedPetIds,
-                        equippedPetId = equippedPetId,
-                        onBuyPet = { pet ->
-                            if (mainState.user != null && mainState.user!!.totalPoints >= pet.costPoints) {
-                                scope.launch {
-                                    db.userDao().addPoints(userId, -pet.costPoints)
-                                    val newOwned = ownedPetIds + pet.id
-                                    ownedPetIds = newOwned
-                                    sharedPrefs.edit().putStringSet("owned_pet_ids_$userId", newOwned.map { it.toString() }.toSet()).apply()
-                                }
-                            }
-                        },
-                        onEquipPet = { petId ->
-                            equippedPetId = petId
-                            sharedPrefs.edit().putInt("equipped_pet_id_$userId", petId).apply()
-                        }
-                    )
-                }
-            }
-        }
-
     }
 }
 
@@ -476,17 +387,17 @@ fun MainBottomNavBar(
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
             .background(Color.Transparent)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
                     brush = Brush.linearGradient(listOf(DarkSurface, CardSurface)),
-                    shape = RoundedCornerShape(32.dp)
+                    shape = RoundedCornerShape(28.dp)
                 )
-                .clip(RoundedCornerShape(32.dp))
-                .padding(horizontal = 4.dp, vertical = 6.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .padding(horizontal = 6.dp, vertical = 6.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -500,10 +411,10 @@ fun MainBottomNavBar(
                     if (isRunButton) {
                         Box(
                             modifier = Modifier
-                                .size(52.dp)
+                                .size(46.dp)
                                 .background(
                                     Brush.linearGradient(listOf(NeonGreen, Color(0xFF00C896))),
-                                    RoundedCornerShape(16.dp)
+                                    RoundedCornerShape(14.dp)
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
@@ -511,7 +422,7 @@ fun MainBottomNavBar(
                                 Icon(
                                     imageVector = item.selectedIcon,
                                     contentDescription = item.label,
-                                    modifier = Modifier.size(26.dp),
+                                    modifier = Modifier.size(22.dp),
                                     tint = DeepNavy
                                 )
                             }
@@ -530,19 +441,31 @@ fun NavBarItem(item: BottomNavItem, isSelected: Boolean, onClick: () -> Unit) {
     IconButton(
         onClick = onClick,
         modifier = Modifier
-            .then(if (isSelected) Modifier.background(NeonGreen.copy(alpha = 0.12f), RoundedCornerShape(14.dp)) else Modifier)
-            .size(48.dp)
+            .then(
+                if (isSelected) Modifier.background(NeonGreen.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
+                else Modifier
+            )
+            .size(42.dp)
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
             Icon(
                 imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
                 contentDescription = item.label,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(18.dp),
                 tint = if (isSelected) NeonGreen else TextMuted
             )
             if (isSelected) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(item.label, color = NeonGreen, fontSize = 8.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Spacer(modifier = Modifier.height(1.dp))
+                Text(
+                    text = item.label,
+                    color = NeonGreen,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
             }
         }
     }
@@ -551,7 +474,7 @@ fun NavBarItem(item: BottomNavItem, isSelected: Boolean, onClick: () -> Unit) {
 @Composable
 fun PreRunScreen(onStart: () -> Unit) {
     val context = LocalContext.current
-    var centerPoint by remember { mutableStateOf(GeoPoint(-6.2088, 106.8456)) } // default Jakarta
+    var centerPoint by remember { mutableStateOf(GeoPoint(-6.2088, 106.8456)) }
 
     LaunchedEffect(Unit) {
         val client = LocationServices.getFusedLocationProviderClient(context)
@@ -561,22 +484,14 @@ fun PreRunScreen(onStart: () -> Unit) {
                     centerPoint = GeoPoint(loc.latitude, loc.longitude)
                 }
             }
-        } catch (e: SecurityException) {
-            // Location permission not granted/active yet
+        } catch (e: Exception) {
+            // Location permission
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // OSM Map background
-//        OsmMap(
-//            modifier = Modifier.fillMaxSize(),
-//            centerPoint = centerPoint,
-//            zoomLevel = 15.5
-//        )
-
         RunScreen()
 
-        // Dark gradient overlay
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -591,7 +506,6 @@ fun PreRunScreen(onStart: () -> Unit) {
                 )
         )
 
-        // PreRun Card Content on Top
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -624,7 +538,6 @@ fun PreRunScreen(onStart: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(24.dp))
             
-            // Start button
             Button(
                 onClick = onStart,
                 modifier = Modifier

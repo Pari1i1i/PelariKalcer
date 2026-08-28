@@ -1,20 +1,11 @@
 package com.example.pelarikalcer.data.local.entity
 
 import androidx.room.Entity
-import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
 import androidx.room.Index
 
 @Entity(
     tableName = "runs",
-    foreignKeys = [
-        ForeignKey(
-            entity = UserEntity::class,
-            parentColumns = ["userId"],
-            childColumns = ["userId"],
-            onDelete = ForeignKey.CASCADE
-        )
-    ],
     indices = [Index("userId")]
 )
 data class RunEntity(

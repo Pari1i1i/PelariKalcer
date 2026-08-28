@@ -1,19 +1,14 @@
 package com.example.pelarikalcer.ui.screens.shop
 
 import androidx.compose.animation.*
-import androidx.compose.animation.core.EaseInOutSine
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.keyframes
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -29,653 +24,951 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.airbnb.lottie.compose.*
+import com.example.pelarikalcer.data.local.entity.*
 import com.example.pelarikalcer.ui.theme.*
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.layout.VerticalAlignmentLine
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-data class PetItem(
-    val id: Int,
-    val name: String,
-    val description: String,
-    val costPoints: Int,
-    val lottieUrl: String,
-    val color: Color,
-    val rarity: String // "Umum", "Langka", "Epik", "Legendaris"
-)
-
-val availablePets = listOf(
-    // Kelinci = rabbit/bunny
-    PetItem(1, "Kelinci", "Kelinci lincah penambah semangat larimu!", 100,
-        "https://assets6.lottiefiles.com/packages/lf20_ysas7q2i.json", Color(0xFFFF9999), "Umum"),
-    // Kucing = cat
-    PetItem(2, "Kucing", "Misterius, gesit, dan setia menemani.", 250,
-        "https://assets10.lottiefiles.com/packages/lf20_n28lkm3z.json", Color(0xFF9999FF), "Langka"),
-    // Rubah = fox
-    PetItem(3, "Rubah", "Membakar semangat lari dengan kobaran api!", 500,
-        "https://assets2.lottiefiles.com/packages/lf20_jbb3ix4l.json", StreakOrange, "Epik"),
-    // Elang = eagle/bird
-    PetItem(4, "Elang", "Terbang tinggi di langit mendampingi performamu.", 750,
-        "https://assets3.lottiefiles.com/packages/lf20_UJNc2t.json", GoldStar, "Epik"),
-    // Naga = dragon
-    PetItem(5, "Naga", "Legenda pelari sejati pemecah rekor!", 2000,
-        "https://assets9.lottiefiles.com/packages/lf20_qn2qEP.json", NeonGreen, "Legendaris"),
-    // Unicorn = unicorn/horse
-    PetItem(6, "Unicorn", "Unik, magis, dan bersinar sepanjang jalan.", 1500,
-        "https://assets4.lottiefiles.com/packages/lf20_rovzcmyh.json", Color(0xFFFF69B4), "Legendaris"),
-)
+/**
+ * Dedicated Full Screen Pet Screen:
+ * - 1 Full Screen Dedicated for Pet
+ * - Renaming Feature (User can name their Pet!)
+ * - Leveling system (Level 1-10: Baby, Level 11+: Adult)
+ * - Hatching with Live Countdown (Common: 5s, +10s per next rarity)
+ * - EXP Progress Bar & Level Up (Pure Gamification, No Pay-to-win stat changes on run)
+ * - Clean modern UI with Vector Icons (No Windows emojis)
+ * - Integrated Modals for Gacha, Direct Purchase Shop & Inventory Swap
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LottiePet(url: String, modifier: Modifier = Modifier) {
-    val petId = when {
-        url.contains("ysas7q2i") || url.contains("kelinci") || url.contains("w51pcehl") -> 1
-        url.contains("n28lkm3z") || url.contains("kucing") || url.contains("myejrn5g") -> 2
-        url.contains("jbb3ix4l") || url.contains("rubah") || url.contains("vyx34qyq") -> 3
-        url.contains("UJNc2t") || url.contains("elang") || url.contains("tpa5y3zp") -> 4
-        url.contains("qn2qEP") || url.contains("naga") || url.contains("9w7k8gux") -> 5
-        url.contains("rovzcmyh") || url.contains("unicorn") || url.contains("v7g8l5ze") -> 6
-        else -> 1
+fun FullPetScreen(
+    activePet: PetEntity?,
+    allPets: List<PetEntity>,
+    userPoints: Int,
+    onRenamePet: (Long, String) -> Unit,
+    onFeedPet: (Long, Int) -> Unit,
+    onSwapActivePet: (Long) -> Unit,
+    onGachaRoll: suspend () -> PetEntity?,
+    onDirectBuy: suspend (PetSpecies) -> PetEntity?
+) {
+    val scope = rememberCoroutineScope()
+
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renameInputText by remember { mutableStateOf("") }
+
+    var showGachaSheet by remember { mutableStateOf(false) }
+    var showDirectShopSheet by remember { mutableStateOf(false) }
+    var showInventorySheet by remember { mutableStateOf(false) }
+
+    var isGachaRolling by remember { mutableStateOf(false) }
+    var gachaResultPet by remember { mutableStateOf<PetEntity?>(null) }
+    var selectedSpeciesToBuy by remember { mutableStateOf<PetSpecies?>(null) }
+
+    // Live Clock ticker for smooth second countdown rendering
+    var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(500L)
+            currentTime = System.currentTimeMillis()
+        }
     }
+
+    val pet = activePet
 
     Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center,
-
-    ) {
-        AnimatedPetAvatar(petId = petId, modifier = Modifier.fillMaxSize())
-    }
-}
-
-@Composable
-fun AnimatedPetAvatar(petId: Int, modifier: Modifier = Modifier) {
-    val infiniteTransition = rememberInfiniteTransition(label = "pet_anim")
-
-    // Shared animations
-    val bounceY by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = -6f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "bounce"
-    )
-
-    val scalePulse by infiniteTransition.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse"
-    )
-
-    val blinkScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.1f,
-        animationSpec = infiniteRepeatable(
-            animation = keyframes {
-                durationMillis = 3000
-                1f at 0
-                1f at 2800
-                0.1f at 2900
-                1f at 3000
-            },
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "blink"
-    )
-
-    val rotAngle by infiniteTransition.animateFloat(
-        initialValue = -8f,
-        targetValue = 8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(700, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "rotate"
-    )
-
-    val particleOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = -30f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "particle"
-    )
-
-    Canvas(modifier = modifier ) {
-        val w = size.width
-        val h = size.height
-        val cx = w / 2f
-        val cy = h / 2f
-        val radius = size.minDimension / 2.3f
-
-        when (petId) {
-            1 -> { // Kelinci Lari (Rabbit)
-                // Hopping / bouncing animation + shift down: telinga panjang ke atas bikin body keliatan naik
-                translate(top = bounceY.dp.toPx()) {                    // Outer Ears
-                    drawOval(
-                        color = Color(0xFFFFCCCC),
-                        topLeft = Offset(cx - radius * 0.45f, cy - radius * 1.25f),
-                        size = Size(radius * 0.35f, radius * 0.8f)
-                    )
-                    drawOval(
-                        color = Color(0xFFFFCCCC),
-                        topLeft = Offset(cx + radius * 0.1f, cy - radius * 1.25f),
-                        size = Size(radius * 0.35f, radius * 0.8f)
-                    )
-
-                    // Inner Ears
-                    drawOval(
-                        color = Color(0xFFFF9999),
-                        topLeft = Offset(cx - radius * 0.37f, cy - radius * 1.15f),
-                        size = Size(radius * 0.2f, radius * 0.6f)
-                    )
-                    drawOval(
-                        color = Color(0xFFFF9999),
-                        topLeft = Offset(cx + radius * 0.17f, cy - radius * 1.15f),
-                        size = Size(radius * 0.2f, radius * 0.6f)
-                    )
-
-                    // Head
-                    drawCircle(
-                        color = Color.White,
-                        radius = radius * 0.7f,
-                        center = Offset(cx, cy)
-                    )
-
-                    // Cheeks
-                    drawCircle(
-                        color = Color(0xFFFFB3B3),
-                        radius = radius * 0.15f,
-                        center = Offset(cx - radius * 0.4f, cy + radius * 0.1f)
-                    )
-                    drawCircle(
-                        color = Color(0xFFFFB3B3),
-                        radius = radius * 0.15f,
-                        center = Offset(cx + radius * 0.4f, cy + radius * 0.1f)
-                    )
-
-                    // Eyes
-                    drawCircle(color = Color.Black, radius = radius * 0.08f, center = Offset(cx - radius * 0.22f, cy - radius * 0.1f))
-                    drawCircle(color = Color.Black, radius = radius * 0.08f, center = Offset(cx + radius * 0.22f, cy - radius * 0.1f))
-
-                    // Nose / Mouth
-                    val nosePath = Path().apply {
-                        moveTo(cx, cy)
-                        lineTo(cx - radius * 0.08f, cy + radius * 0.08f)
-                        lineTo(cx + radius * 0.08f, cy + radius * 0.08f)
-                        close()
-                    }
-                    drawPath(path = nosePath, color = Color(0xFFFF6666))
-                }
-            }
-
-            2 -> { // Kucing Ninja (Cat) — shift down dikit, telinga+ninja band bikin condong ke atas
-                translate(top = 0f) {                    // Ears
-                    val earL = Path().apply {
-                        moveTo(cx - radius * 0.6f, cy - radius * 0.3f)
-                        lineTo(cx - radius * 0.65f, cy - radius * 0.9f)
-                        lineTo(cx - radius * 0.1f, cy - radius * 0.6f)
-                        close()
-                    }
-                    val earR = Path().apply {
-                        moveTo(cx + radius * 0.6f, cy - radius * 0.3f)
-                        lineTo(cx + radius * 0.65f, cy - radius * 0.9f)
-                        lineTo(cx + radius * 0.1f, cy - radius * 0.6f)
-                        close()
-                    }
-                    drawPath(earL, Color(0xFF666699))
-                    drawPath(earR, Color(0xFF666699))
-
-                    // Inner ears
-                    val innerEarL = Path().apply {
-                        moveTo(cx - radius * 0.52f, cy - radius * 0.35f)
-                        lineTo(cx - radius * 0.57f, cy - radius * 0.8f)
-                        lineTo(cx - radius * 0.18f, cy - radius * 0.55f)
-                        close()
-                    }
-                    val innerEarR = Path().apply {
-                        moveTo(cx + radius * 0.52f, cy - radius * 0.35f)
-                        lineTo(cx + radius * 0.57f, cy - radius * 0.8f)
-                        lineTo(cx + radius * 0.18f, cy - radius * 0.55f)
-                        close()
-                    }
-                    drawPath(innerEarL, Color(0xFFFF99C2))
-                    drawPath(innerEarR, Color(0xFFFF99C2))
-
-                    // Head
-                    drawCircle(color = Color(0xFF8080C0), radius = radius * 0.7f, center = Offset(cx, cy))
-
-                    // Ninja Band
-                    drawRect(
-                        color = Color(0xFF1A1A3A),
-                        topLeft = Offset(cx - radius * 0.67f, cy - radius * 0.25f),
-                        size = Size(radius * 1.34f, radius * 0.35f)
-                    )
-                    // Metal plate
-                    drawRoundRect(
-                        color = Color(0xFFCCCCCC),
-                        topLeft = Offset(cx - radius * 0.2f, cy - radius * 0.2f),
-                        size = Size(radius * 0.4f, radius * 0.25f),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f)
-                    )
-
-                    // Blinking Eyes
-                    scale(scaleX = 1f, scaleY = blinkScale, pivot = Offset(cx, cy)) {
-                        drawCircle(color = Color(0xFFFFD700), radius = radius * 0.08f, center = Offset(cx - radius * 0.35f, cy - radius * 0.08f))
-                        drawCircle(color = Color(0xFFFFD700), radius = radius * 0.08f, center = Offset(cx + radius * 0.35f, cy - radius * 0.08f))
-                    }
-
-                    // Whiskers
-                    drawLine(Color.White, Offset(cx - radius * 0.5f, cy + radius * 0.1f), Offset(cx - radius * 0.8f, cy + radius * 0.05f), strokeWidth = 3f)
-                    drawLine(Color.White, Offset(cx - radius * 0.5f, cy + radius * 0.2f), Offset(cx - radius * 0.8f, cy + radius * 0.23f), strokeWidth = 3f)
-                    drawLine(Color.White, Offset(cx + radius * 0.5f, cy + radius * 0.1f), Offset(cx + radius * 0.8f, cy + radius * 0.05f), strokeWidth = 3f)
-                    drawLine(Color.White, Offset(cx + radius * 0.5f, cy + radius * 0.2f), Offset(cx + radius * 0.8f, cy + radius * 0.23f), strokeWidth = 3f)
-                }
-            }
-
-            3 -> { // Rubah Api (Fox) — shift down, telinga + partikel api bikin condong ke atas
-                translate(top = radius * 0.13f) {
-                    // Fire Particles rising
-                    val pX = floatArrayOf(-12f, 15f, -2f)
-                    val pY = floatArrayOf(0f, 10f, 25f)
-                    val pR = floatArrayOf(8f, 12f, 6f)
-                    val pColors = listOf(Color(0xFFFFA500), Color(0xFFFF4500), Color(0xFFFFD700))
-                    pColors.indices.forEach { i ->
-                        val progress = (particleOffset + pY[i]) % 60f
-                        val alpha = (1f - (progress / -60f)).coerceIn(0f, 1f)
-                        drawCircle(
-                            color = pColors[i].copy(alpha = alpha),
-                            radius = pR[i].dp.toPx(),
-                            center = Offset(cx + pX[i].dp.toPx(), cy - radius * 0.5f + (progress).dp.toPx())
-                        )
-                    }
-
-                    // Fox Ears
-                    val earL = Path().apply {
-                        moveTo(cx - radius * 0.6f, cy - radius * 0.2f)
-                        lineTo(cx - radius * 0.65f, cy - radius * 0.95f)
-                        lineTo(cx - radius * 0.15f, cy - radius * 0.5f)
-                        close()
-                    }
-                    val earR = Path().apply {
-                        moveTo(cx + radius * 0.6f, cy - radius * 0.2f)
-                        lineTo(cx + radius * 0.65f, cy - radius * 0.95f)
-                        lineTo(cx + radius * 0.15f, cy - radius * 0.5f)
-                        close()
-                    }
-                    drawPath(earL, Color(0xFFE65C00))
-                    drawPath(earR, Color(0xFFE65C00))
-
-                    // Fox Face Path (Pointy chin)
-                    val facePath = Path().apply {
-                        moveTo(cx - radius * 0.7f, cy - radius * 0.3f)
-                        lineTo(cx + radius * 0.7f, cy - radius * 0.3f)
-                        quadraticTo(cx + radius * 0.6f, cy + radius * 0.3f, cx, cy + radius * 0.7f)
-                        quadraticTo(cx - radius * 0.6f, cy + radius * 0.3f, cx - radius * 0.7f, cy - radius * 0.3f)
-                        close()
-                    }
-                    drawPath(facePath, Color(0xFFFF701A))
-
-                    // Cheeks (White parts)
-                    val cheekL = Path().apply {
-                        moveTo(cx - radius * 0.6f, cy)
-                        quadraticTo(cx - radius * 0.4f, cy + radius * 0.3f, cx, cy + radius * 0.7f)
-                        quadraticTo(cx - radius * 0.5f, cy + radius * 0.2f, cx - radius * 0.6f, cy)
-                        close()
-                    }
-                    val cheekR = Path().apply {
-                        moveTo(cx + radius * 0.6f, cy)
-                        quadraticTo(cx + radius * 0.4f, cy + radius * 0.3f, cx, cy + radius * 0.7f)
-                        quadraticTo(cx + radius * 0.5f, cy + radius * 0.2f, cx + radius * 0.6f, cy)
-                        close()
-                    }
-                    drawPath(cheekL, Color.White)
-                    drawPath(cheekR, Color.White)
-
-                    // Snout/Nose
-                    drawCircle(color = Color.Black, radius = radius * 0.08f, center = Offset(cx, cy + radius * 0.62f))
-
-                    // Eyes
-                    drawCircle(color = Color.Black, radius = radius * 0.06f, center = Offset(cx - radius * 0.25f, cy + radius * 0.1f))
-                    drawCircle(color = Color.Black, radius = radius * 0.06f, center = Offset(cx + radius * 0.25f, cy + radius * 0.1f))
-                }
-            }
-
-            4 -> { // Elang Emas (Eagle) — shift down dikit, sayap yang flap bikin sedikit condong ke atas
-                translate(top = radius * 0.05f) {
-                    // Flapping Wings
-                    rotate(degrees = rotAngle * 2.5f, pivot = Offset(cx - radius * 0.8f, cy)) {
-                        drawOval(
-                            color = Color(0xFFCC9900),
-                            topLeft = Offset(cx - radius * 1.3f, cy - radius * 0.3f),
-                            size = Size(radius * 0.6f, radius * 0.4f)
-                        )
-                    }
-                    rotate(degrees = -rotAngle * 2.5f, pivot = Offset(cx + radius * 0.8f, cy)) {
-                        drawOval(
-                            color = Color(0xFFCC9900),
-                            topLeft = Offset(cx + radius * 0.7f, cy - radius * 0.3f),
-                            size = Size(radius * 0.6f, radius * 0.4f)
-                        )
-                    }
-
-                    // Head
-                    drawCircle(color = Color(0xFFFFD700), radius = radius * 0.65f, center = Offset(cx, cy))
-
-                    // Eyes
-                    drawCircle(color = Color.White, radius = radius * 0.14f, center = Offset(cx - radius * 0.22f, cy - radius * 0.1f))
-                    drawCircle(color = Color.White, radius = radius * 0.14f, center = Offset(cx + radius * 0.22f, cy - radius * 0.1f))
-                    drawCircle(color = Color.Black, radius = radius * 0.07f, center = Offset(cx - radius * 0.2f, cy - radius * 0.08f))
-                    drawCircle(color = Color.Black, radius = radius * 0.07f, center = Offset(cx + radius * 0.2f, cy - radius * 0.08f))
-
-                    // Sharp Beak
-                    val beak = Path().apply {
-                        moveTo(cx - radius * 0.15f, cy + radius * 0.08f)
-                        lineTo(cx + radius * 0.15f, cy + radius * 0.08f)
-                        lineTo(cx, cy + radius * 0.55f)
-                        close()
-                    }
-                    drawPath(beak, Color(0xFFFF6600))
-                }
-            }
-
-            5 -> { // Naga Kilat (Dragon) — shift down, tanduk tinggi bikin condong ke atas
-                translate(top = radius * 0.20f) {
-                    scale(scalePulse, scalePulse, Offset(cx, cy)) {
-                        // Horns
-                        val hornL = Path().apply {
-                            moveTo(cx - radius * 0.3f, cy - radius * 0.5f)
-                            quadraticTo(cx - radius * 0.5f, cy - radius * 1.1f, cx - radius * 0.7f, cy - radius * 0.9f)
-                            quadraticTo(cx - radius * 0.4f, cy - radius * 0.8f, cx - radius * 0.2f, cy - radius * 0.4f)
-                            close()
-                        }
-                        val hornR = Path().apply {
-                            moveTo(cx + radius * 0.3f, cy - radius * 0.5f)
-                            quadraticTo(cx + radius * 0.5f, cy - radius * 1.1f, cx + radius * 0.7f, cy - radius * 0.9f)
-                            quadraticTo(cx + radius * 0.4f, cy - radius * 0.8f, cx + radius * 0.2f, cy - radius * 0.4f)
-                            close()
-                        }
-                        drawPath(hornL, Color(0xFFFFD700))
-                        drawPath(hornR, Color(0xFFFFD700))
-
-                        // Main Dragon Head
-                        drawCircle(color = Color(0xFF00B386), radius = radius * 0.7f, center = Offset(cx, cy))
-
-                        // Snout
-                        drawRoundRect(
-                            color = Color(0xFF00FFCC),
-                            topLeft = Offset(cx - radius * 0.45f, cy + radius * 0.1f),
-                            size = Size(radius * 0.9f, radius * 0.45f),
-                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx(), 10.dp.toPx())
-                        )
-                        // Nostrils
-                        drawCircle(color = Color(0xFF00664F), radius = radius * 0.05f, center = Offset(cx - radius * 0.15f, cy + radius * 0.3f))
-                        drawCircle(color = Color(0xFF00664F), radius = radius * 0.05f, center = Offset(cx + radius * 0.15f, cy + radius * 0.3f))
-
-                        // Glowing eyes
-                        drawCircle(color = Color.Black, radius = radius * 0.12f, center = Offset(cx - radius * 0.25f, cy - radius * 0.15f))
-                        drawCircle(color = Color.Black, radius = radius * 0.12f, center = Offset(cx + radius * 0.25f, cy - radius * 0.15f))
-                        drawCircle(color = Color(0xFF00FFCC), radius = radius * 0.05f, center = Offset(cx - radius * 0.22f, cy - radius * 0.15f))
-                        drawCircle(color = Color(0xFF00FFCC), radius = radius * 0.05f, center = Offset(cx + radius * 0.22f, cy - radius * 0.15f))
-                    }
-                }
-            }
-
-            6 -> { // Unicorn Pelangi (Unicorn) — shift down, tanduk paling tinggi + mane sebelah kanan bikin condong
-                translate(top = radius * 0.23f) {
-                    // Rainbow Aura
-                    val colors = listOf(
-                        Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Magenta, Color.Red
-                    )
-                    drawCircle(
-                        brush = Brush.sweepGradient(colors, Offset(cx, cy)),
-                        radius = radius * 0.85f,
-                        center = Offset(cx, cy),
-                        style = Stroke(width = 4.dp.toPx())
-                    )
-
-                    // Golden Horn
-                    val horn = Path().apply {
-                        moveTo(cx - radius * 0.12f, cy - radius * 0.5f)
-                        lineTo(cx + radius * 0.12f, cy - radius * 0.5f)
-                        lineTo(cx, cy - radius * 1.3f)
-                        close()
-                    }
-                    drawPath(horn, Color(0xFFFFA500))
-
-                    // Unicorn Head (White)
-                    drawCircle(color = Color.White, radius = radius * 0.65f, center = Offset(cx, cy))
-
-                    // Pink cheeks
-                    drawCircle(color = Color(0xFFFFB3D9), radius = radius * 0.12f, center = Offset(cx - radius * 0.3f, cy + radius * 0.2f))
-                    drawCircle(color = Color(0xFFFFB3D9), radius = radius * 0.12f, center = Offset(cx + radius * 0.3f, cy + radius * 0.2f))
-
-                    // Mane (Pink/Purple) — sekarang simetris kiri-kanan biar bounding shape balance
-                    drawCircle(color = Color(0xFFFF80DF), radius = radius * 0.18f, center = Offset(cx + radius * 0.45f, cy - radius * 0.3f))
-                    drawCircle(color = Color(0xFFD980FF), radius = radius * 0.18f, center = Offset(cx + radius * 0.45f, cy))
-                    drawCircle(color = Color(0xFFFF80DF).copy(alpha = 0.7f), radius = radius * 0.15f, center = Offset(cx - radius * 0.45f, cy - radius * 0.25f))
-                    drawCircle(color = Color(0xFFD980FF).copy(alpha = 0.7f), radius = radius * 0.15f, center = Offset(cx - radius * 0.45f, cy))
-
-                    // Sparkly eyes
-                    drawCircle(color = Color(0xFF4A148C), radius = radius * 0.08f, center = Offset(cx - radius * 0.22f, cy - radius * 0.08f))
-                    drawCircle(color = Color(0xFF4A148C), radius = radius * 0.08f, center = Offset(cx + radius * 0.22f, cy - radius * 0.08f))
-                    drawCircle(color = Color.White, radius = radius * 0.03f, center = Offset(cx - radius * 0.25f, cy - radius * 0.1f))
-                    drawCircle(color = Color.White, radius = radius * 0.03f, center = Offset(cx + radius * 0.25f, cy - radius * 0.1f))
-                }
-            }
-        }
-    }
-}
-
-
-@Composable
-fun PetShopScreen(
-    userPoints: Int,
-    ownedPetIds: List<Int>,
-    equippedPetId: Int?,
-    onBuyPet: (PetItem) -> Unit,
-    onEquipPet: (Int) -> Unit
-) {
-    var selectedPet by remember { mutableStateOf<PetItem?>(null) }
-
-    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DeepNavy)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF090D1A),
+                        DeepNavy,
+                        Color(0xFF0F172A)
+                    )
+                )
+            )
     ) {
-        // Header
-        Box(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(CardSurface, DeepNavy)))
-                .padding(horizontal = 24.dp, vertical = 20.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 110.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column {
-                Text("Toko Pet", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Stars, null, tint = GoldStar, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("$userPoints poin tersedia", style = MaterialTheme.typography.bodyMedium, color = GoldStar, fontWeight = FontWeight.SemiBold)
+            // Top Bar
+            PetTopBar(
+                userPoints = userPoints,
+                onOpenGacha = { showGachaSheet = true },
+                onOpenShop = { showDirectShopSheet = true },
+                onOpenInventory = { showInventorySheet = true }
+            )
+
+            if (pet != null) {
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Hero Pet Spotlight Card
+                PetSpotlightSection(
+                    pet = pet,
+                    onOpenRename = {
+                        renameInputText = pet.displayName
+                        showRenameDialog = true
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Growth & Status Card
+                if (!pet.isHatched) {
+                    HatchCountdownCard(pet = pet, currentTime = currentTime)
+                } else {
+                    PetLevelExpCard(
+                        pet = pet,
+                        userPoints = userPoints,
+                        onFeedExp = { pts -> onFeedPet(pet.id, pts) }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Gamification Info Card (Cosmetic Tier & Loyalty Companion)
+                PetGamificationInfoCard(pet = pet)
+
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Belum ada Pet aktif.", color = TextSecondary, fontSize = 16.sp)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = { showGachaSheet = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
+                        ) {
+                            Text("Buka Gacha Telur", color = DeepNavy, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Action Quick Bar with Clean Spacing
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Button(
+                    onClick = { showGachaSheet = true },
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Casino, null, tint = DeepNavy, modifier = Modifier.size(20.dp))
+                        Text("Gacha Telur", color = DeepNavy, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = { showInventorySheet = true },
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, GoldStar.copy(alpha = 0.6f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = GoldStar)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Inventory2, null, tint = GoldStar, modifier = Modifier.size(20.dp))
+                        Text("Koleksi (${allPets.size})", color = GoldStar, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
                 }
             }
         }
-
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(availablePets) { pet ->
-                val isOwned = pet.id in ownedPetIds
-                val isEquipped = pet.id == equippedPetId
-
-                PetCard(
-                    pet = pet,
-                    isOwned = isOwned,
-                    isEquipped = isEquipped,
-                    canAfford = userPoints >= pet.costPoints,
-                    onClick = { selectedPet = pet }
-                )
-            }
-            item { Spacer(modifier = Modifier.height(80.dp)) }
-            item { Spacer(modifier = Modifier.height(80.dp)) }
-        }
     }
 
-    // Detail Dialog
-    selectedPet?.let { pet ->
-        val isOwned = pet.id in ownedPetIds
-        val isEquipped = pet.id == equippedPetId
-        val canAfford = userPoints >= pet.costPoints
-
+    // Rename Dialog
+    if (showRenameDialog && pet != null) {
         AlertDialog(
-            onDismissRequest = { selectedPet = null },
+            onDismissRequest = { showRenameDialog = false },
             containerColor = DarkSurface,
             title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier.size(56.dp).background(pet.color.copy(alpha = 0.2f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        LottiePet(url = pet.lottieUrl, modifier = Modifier.size(48.dp))
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(pet.name, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
-                        Text(pet.rarity, color = pet.color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Edit, null, tint = NeonGreen)
+                    Text("Beri Nama Pet", fontWeight = FontWeight.Bold, color = TextPrimary)
                 }
             },
             text = {
                 Column {
-                    Text(pet.description, color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    if (!isOwned) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Stars, null, tint = GoldStar, modifier = Modifier.size(16.dp))
-                            Text(" ${pet.costPoints} poin", color = GoldStar, fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    Text("Panggil pet kesayanganmu dengan nama keren!", color = TextSecondary, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(14.dp))
+                    OutlinedTextField(
+                        value = renameInputText,
+                        onValueChange = { renameInputText = it },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonGreen,
+                            unfocusedBorderColor = TextMuted,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            cursorColor = NeonGreen
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             },
             confirmButton = {
-                when {
-                    isEquipped -> TextButton(onClick = { selectedPet = null }) { Text("Sudah Dipakai", color = NeonGreen) }
-                    isOwned -> Button(
-                        onClick = { onEquipPet(pet.id); selectedPet = null },
-                        colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
-                    ) { Text("Pakai Sekarang", color = DeepNavy, fontWeight = FontWeight.Bold) }
-                    canAfford -> Button(
-                        onClick = { onBuyPet(pet); selectedPet = null },
-                        colors = ButtonDefaults.buttonColors(containerColor = GoldStar)
-                    ) { Text("Beli Pet!", color = DeepNavy, fontWeight = FontWeight.Bold) }
-                    else -> TextButton(onClick = { selectedPet = null }) { Text("Poin Tidak Cukup", color = DangerRed) }
+                Button(
+                    onClick = {
+                        if (renameInputText.isNotBlank()) {
+                            onRenamePet(pet.id, renameInputText)
+                        }
+                        showRenameDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
+                ) {
+                    Text("Simpan", color = DeepNavy, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { selectedPet = null }) { Text("Tutup", color = TextSecondary) }
+                TextButton(onClick = { showRenameDialog = false }) {
+                    Text("Batal", color = TextSecondary)
+                }
             }
         )
     }
-}
 
-@Composable
-fun PetCard(
-    pet: PetItem,
-    isOwned: Boolean,
-    isEquipped: Boolean,
-    canAfford: Boolean,
-    onClick: () -> Unit
-) {
-    val borderColor = when {
-        isEquipped -> NeonGreen
-        isOwned -> pet.color.copy(alpha = 0.6f)
-        canAfford -> pet.color.copy(alpha = 0.3f)
-        else -> TextMuted.copy(alpha = 0.2f)
-    }
-
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isEquipped) NeonGreen.copy(alpha = 0.1f) else CardSurface
-        ),
-        border = BorderStroke(if (isEquipped) 2.dp else 1.dp, borderColor)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+    // Gacha Modal Sheet
+    if (showGachaSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showGachaSheet = false },
+            containerColor = DarkSurface
         ) {
-            // Rarity badge
-            Box(
+            Column(
                 modifier = Modifier
-                    .align(Alignment.End)
-                    .background(pet.color.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 36.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(pet.rarity, color = pet.color, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Animated Lottie Pet!
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .background(pet.color.copy(alpha = 0.12f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                LottiePet(url = pet.lottieUrl, modifier = Modifier.size(72.dp))
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(pet.name, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp, textAlign = TextAlign.Center)
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            when {
-                isEquipped -> {
-                    Box(
-                        modifier = Modifier.background(NeonGreen.copy(alpha = 0.2f), RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Text("Dipakai", color = NeonGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Casino, null, tint = GoldStar)
+                    Text("Gacha Telur Misteri", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = GoldStar)
                 }
-                isOwned -> {
-                    Box(
-                        modifier = Modifier.background(TextSecondary.copy(alpha = 0.1f), RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Text("Dimiliki", color = TextSecondary, fontSize = 11.sp)
-                    }
-                }
-                else -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Stars, null, tint = if (canAfford) GoldStar else TextMuted, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            "${pet.costPoints}",
-                            fontWeight = FontWeight.Bold,
-                            color = if (canAfford) GoldStar else TextMuted,
-                            fontSize = 13.sp
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("Dapatkan telur Common (5s), Uncommon (15s), Rare (25s), Epic (35s), Legendary (45s)!", fontSize = 12.sp, color = TextSecondary, textAlign = TextAlign.Center)
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Box(
+                    modifier = Modifier.size(140.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isGachaRolling) {
+                        CircularProgressIndicator(color = NeonGreen, modifier = Modifier.size(100.dp), strokeWidth = 5.dp)
+                        Text("Membuka...", fontWeight = FontWeight.Bold, color = NeonGreen)
+                    } else {
+                        PetAvatarCanvas(
+                            speciesId = 9,
+                            stage = PetStage.EGG,
+                            rarity = Rarity.LEGENDARY,
+                            modifier = Modifier.size(120.dp)
                         )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                val canAfford = userPoints >= GachaConfig.GACHA_COST_POINTS
+                Button(
+                    onClick = {
+                        if (canAfford && !isGachaRolling) {
+                            isGachaRolling = true
+                            scope.launch {
+                                delay(1600)
+                                val result = onGachaRoll()
+                                isGachaRolling = false
+                                showGachaSheet = false
+                                gachaResultPet = result
+                            }
+                        }
+                    },
+                    enabled = canAfford && !isGachaRolling,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(26.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
+                ) {
+                    Text(
+                        if (canAfford) "GACHA SEKARANG (100 Poin)" else "Poin Tidak Cukup (Butuh 100 Pts)",
+                        fontWeight = FontWeight.ExtraBold,
+                        color = DeepNavy,
+                        fontSize = 15.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Rate details
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Rarity.values().forEach { r ->
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(r.displayName, color = r.color, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("${r.hatchSeconds}s", color = TextSecondary, fontSize = 10.sp)
+                        }
                     }
                 }
             }
         }
+    }
+
+    // Direct Buy Store Sheet
+    if (showDirectShopSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showDirectShopSheet = false },
+            containerColor = DarkSurface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.ShoppingCart, null, tint = TextPrimary)
+                    Text("Beli Telur Pilihan", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = TextPrimary)
+                }
+                Text("Pilih pet tier impianmu langsung dengan poin!", fontSize = 12.sp, color = TextSecondary)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(defaultSpeciesCatalog) { species ->
+                        val canAfford = userPoints >= species.rarity.directCostPoints
+                        Card(
+                            onClick = {
+                                selectedSpeciesToBuy = species
+                            },
+                            colors = CardDefaults.cardColors(containerColor = CardSurface),
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(1.dp, species.rarity.color.copy(alpha = 0.4f))
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(56.dp).background(species.rarity.color.copy(0.12f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    PetAvatarCanvas(
+                                        speciesId = species.id,
+                                        stage = PetStage.ADULT,
+                                        rarity = species.rarity,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(species.name, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 12.sp)
+                                Text("${species.rarity.hatchSeconds}s hatch", color = species.rarity.color, fontSize = 10.sp)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Default.Stars, null, tint = GoldStar, modifier = Modifier.size(14.dp))
+                                    Text("${species.rarity.directCostPoints}", fontWeight = FontWeight.ExtraBold, color = GoldStar, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Direct Buy Confirm Dialog
+    selectedSpeciesToBuy?.let { species ->
+        val cost = species.rarity.directCostPoints
+        val canAfford = userPoints >= cost
+
+        AlertDialog(
+            onDismissRequest = { selectedSpeciesToBuy = null },
+            containerColor = DarkSurface,
+            title = {
+                Text("Beli Telur ${species.name}?", fontWeight = FontWeight.Bold, color = TextPrimary)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(species.description, color = TextSecondary, fontSize = 13.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.HourglassBottom, null, tint = GoldStar, modifier = Modifier.size(16.dp))
+                        Text("Waktu menetas: ${species.rarity.hatchSeconds} detik", color = GoldStar, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.Stars, null, tint = NeonGreen, modifier = Modifier.size(16.dp))
+                        Text("Harga: $cost Poin", color = NeonGreen, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                if (canAfford) {
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                onDirectBuy(species)
+                                selectedSpeciesToBuy = null
+                                showDirectShopSheet = false
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
+                    ) {
+                        Text("Beli Sekarang", color = DeepNavy, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    TextButton(onClick = { selectedSpeciesToBuy = null }) {
+                        Text("Poin Tidak Cukup", color = DangerRed)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { selectedSpeciesToBuy = null }) {
+                    Text("Batal", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    // Gacha Result Reveal
+    gachaResultPet?.let { newPet ->
+        AlertDialog(
+            onDismissRequest = { gachaResultPet = null },
+            containerColor = DarkSurface,
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.AutoAwesome, null, tint = GoldStar)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("TELUR DIDAPATKAN!", fontWeight = FontWeight.ExtraBold, color = GoldStar, fontSize = 18.sp)
+                }
+            },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        modifier = Modifier.size(110.dp).background(newPet.rarity.color.copy(0.15f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        PetAvatarCanvas(
+                            speciesId = newPet.speciesId,
+                            stage = PetStage.EGG,
+                            rarity = newPet.rarity,
+                            modifier = Modifier.size(90.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Telur ${newPet.species.name}", fontWeight = FontWeight.ExtraBold, color = TextPrimary, fontSize = 17.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    RarityBadge(rarity = newPet.rarity)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Waktu menetas: ${newPet.totalHatchSeconds} detik!", color = TextSecondary, fontSize = 13.sp)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onSwapActivePet(newPet.id)
+                        gachaResultPet = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
+                ) {
+                    Text("Jadikan Pet Aktif", color = DeepNavy, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { gachaResultPet = null }) {
+                    Text("Tutup", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    // Inventory Sheet
+    if (showInventorySheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showInventorySheet = false },
+            containerColor = DarkSurface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Inventory2, null, tint = TextPrimary)
+                    Text("Koleksi Pet Kamu", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = TextPrimary)
+                }
+                Text("Pilih 1 pet untuk dijadikan pendamping aktif.", fontSize = 12.sp, color = TextSecondary)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(allPets) { p ->
+                        val isActive = p.id == activePet?.id
+                        Card(
+                            onClick = {
+                                onSwapActivePet(p.id)
+                                showInventorySheet = false
+                            },
+                            colors = CardDefaults.cardColors(containerColor = if (isActive) CardSurface else Color(0xFF161F36)),
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(if (isActive) 2.dp else 1.dp, if (isActive) NeonGreen else p.rarity.color.copy(0.3f))
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(54.dp).background(p.rarity.color.copy(0.12f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    PetAvatarCanvas(
+                                        speciesId = p.speciesId,
+                                        stage = p.effectiveStage,
+                                        rarity = p.rarity,
+                                        modifier = Modifier.size(46.dp)
+                                    )
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(p.displayName, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 15.sp)
+                                        RarityBadge(rarity = p.rarity)
+                                    }
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    if (!p.isHatched) {
+                                        val remSec = p.getRemainingSeconds(currentTime)
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Icon(Icons.Default.HourglassBottom, null, tint = GoldStar, modifier = Modifier.size(13.dp))
+                                            Text("Telur (${remSec}s lagi)", color = GoldStar, fontSize = 11.sp)
+                                        }
+                                    } else {
+                                        Text("Level ${p.level} • ${if (p.level >= 11) "Adult" else "Baby"}", color = NeonGreen, fontSize = 11.sp)
+                                    }
+                                }
+                                if (isActive) {
+                                    Box(
+                                        modifier = Modifier.background(NeonGreen.copy(0.2f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text("AKTIF", color = NeonGreen, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                    }
+                                } else {
+                                    Text("Ganti", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Top Bar with Points and Quick Sheet Triggers
+ */
+@Composable
+fun PetTopBar(
+    userPoints: Int,
+    onOpenGacha: () -> Unit,
+    onOpenShop: () -> Unit,
+    onOpenInventory: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(
+                "My Pet",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = TextPrimary
+            )
+            Text(
+                "Sahabat lari & evolusi",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary
+            )
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Points Capsule
+            Box(
+                modifier = Modifier
+                    .background(GoldStar.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
+                    .border(1.dp, GoldStar.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.Stars, null, tint = GoldStar, modifier = Modifier.size(16.dp))
+                    Text("$userPoints", color = GoldStar, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
+                }
+            }
+
+            // Quick Gacha icon button
+            IconButton(
+                onClick = onOpenGacha,
+                modifier = Modifier.size(38.dp).background(NeonGreen.copy(0.15f), CircleShape)
+            ) {
+                Icon(Icons.Default.Casino, null, tint = NeonGreen, modifier = Modifier.size(20.dp))
+            }
+
+            // Quick Shop icon button
+            IconButton(
+                onClick = onOpenShop,
+                modifier = Modifier.size(38.dp).background(AccentOrange.copy(0.15f), CircleShape)
+            ) {
+                Icon(Icons.Default.ShoppingCart, null, tint = AccentOrange, modifier = Modifier.size(20.dp))
+            }
+        }
+    }
+}
+
+/**
+ * Center Spotlight Card: Big Pet Avatar + Nickname + Rename Button
+ */
+@Composable
+fun PetSpotlightSection(
+    pet: PetEntity,
+    onOpenRename: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = CardSurface),
+        border = BorderStroke(1.5.dp, pet.rarity.color.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Rarity & Stage Capsule
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RarityBadge(rarity = pet.rarity)
+
+                val stageLabel = when {
+                    !pet.isHatched -> "State: EGG"
+                    pet.level >= 11 -> "Stage: ADULT"
+                    else -> "Stage: BABY"
+                }
+
+                Box(
+                    modifier = Modifier
+                        .background(NeonGreen.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(stageLabel, color = NeonGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Big Spotlight Canvas Avatar
+            Box(
+                modifier = Modifier
+                    .size(190.dp)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(pet.rarity.color.copy(alpha = 0.25f), Color.Transparent)
+                        ),
+                        CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                PetAvatarCanvas(
+                    speciesId = pet.speciesId,
+                    stage = pet.effectiveStage,
+                    rarity = pet.rarity,
+                    modifier = Modifier.size(165.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Pet Name + Rename Button
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    pet.displayName,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 24.sp,
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(
+                    onClick = onOpenRename,
+                    modifier = Modifier.size(32.dp).background(TextSecondary.copy(alpha = 0.15f), CircleShape)
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = "Rename Pet", tint = TextPrimary, modifier = Modifier.size(16.dp))
+                }
+            }
+
+            Text(
+                pet.species.description,
+                color = TextSecondary,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Hatch Countdown Card (Dynamic time-based calculation)
+ */
+@Composable
+fun HatchCountdownCard(pet: PetEntity, currentTime: Long) {
+    val remainingSeconds = pet.getRemainingSeconds(currentTime)
+    val hatchProgress = pet.getHatchProgress(currentTime)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = CardSurface),
+        border = BorderStroke(1.dp, GoldStar.copy(alpha = 0.4f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Default.HourglassBottom, null, tint = GoldStar, modifier = Modifier.size(20.dp))
+                    Text("Menetas Otomatis", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 15.sp)
+                }
+                Text(
+                    "$remainingSeconds detik lagi",
+                    color = GoldStar,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 15.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            LinearProgressIndicator(
+                progress = { hatchProgress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(5.dp)),
+                color = GoldStar,
+                trackColor = TextMuted.copy(alpha = 0.2f)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                "Telur sedang dierami secara otomatis. Begitu hitungan mundur selesai, pet akan menetas menjadi BABY.",
+                fontSize = 11.sp,
+                color = TextSecondary
+            )
+        }
+    }
+}
+
+@Composable
+fun PetLevelExpCard(
+    pet: PetEntity,
+    userPoints: Int,
+    onFeedExp: (Int) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = CardSurface),
+        border = BorderStroke(1.dp, NeonGreen.copy(alpha = 0.4f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.MilitaryTech, null, tint = NeonGreen, modifier = Modifier.size(22.dp))
+                        Text("Level ${pet.level}", fontWeight = FontWeight.ExtraBold, color = NeonGreen, fontSize = 20.sp)
+                    }
+                    Text(
+                        if (pet.level >= 11) "Tahap ADULT (Dewasa)" else "Tahap BABY (Capai Lv 11 untuk Adult)",
+                        fontSize = 11.sp,
+                        color = TextSecondary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Text(
+                    "${pet.currentExp} / ${pet.maxExp} EXP",
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    fontSize = 13.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            LinearProgressIndicator(
+                progress = { pet.expPercent },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(5.dp)),
+                color = NeonGreen,
+                trackColor = TextMuted.copy(alpha = 0.2f)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            val canFeed = userPoints >= 25
+            OutlinedButton(
+                onClick = { onFeedExp(25) },
+                enabled = canFeed,
+                modifier = Modifier.fillMaxWidth().height(46.dp),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, if (canFeed) GoldStar else TextMuted),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = GoldStar)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Fastfood, null, tint = if (canFeed) GoldStar else TextMuted, modifier = Modifier.size(18.dp))
+                    Text(
+                        if (canFeed) "Beri Makan (25 Poin = +25 EXP)" else "Poin tidak cukup untuk beri makan",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (canFeed) GoldStar else TextMuted
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Pet Gamification & Companion Info (Clean pure gamification, no pay-to-win run effect)
+ */
+@Composable
+fun PetGamificationInfoCard(pet: PetEntity) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = CardSurface)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            horizontalArrangement = Arrangement.SpaceAround
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.Grade, null, tint = pet.rarity.color, modifier = Modifier.size(16.dp))
+                    Text("TIER", fontWeight = FontWeight.Bold, color = TextMuted, fontSize = 11.sp)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(pet.rarity.displayName, fontWeight = FontWeight.ExtraBold, color = pet.rarity.color, fontSize = 16.sp)
+                Text("${pet.rarity.hatchSeconds}s hatch", fontSize = 10.sp, color = TextSecondary)
+            }
+
+            HorizontalDivider(
+                color = TextMuted.copy(alpha = 0.2f),
+                modifier = Modifier.height(45.dp).width(1.dp)
+            )
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.Favorite, null, tint = Color(0xFFF43F5E), modifier = Modifier.size(16.dp))
+                    Text("LOYALTY", fontWeight = FontWeight.Bold, color = TextMuted, fontSize = 11.sp)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Companion", fontWeight = FontWeight.ExtraBold, color = NeonGreen, fontSize = 16.sp)
+                Text("Gamifikasi Lari", fontSize = 10.sp, color = TextSecondary)
+            }
+
+            HorizontalDivider(
+                color = TextMuted.copy(alpha = 0.2f),
+                modifier = Modifier.height(45.dp).width(1.dp)
+            )
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.FitnessCenter, null, tint = AccentOrange, modifier = Modifier.size(16.dp))
+                    Text("FITUR", fontWeight = FontWeight.Bold, color = TextMuted, fontSize = 11.sp)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Fair Play", fontWeight = FontWeight.ExtraBold, color = AccentOrange, fontSize = 16.sp)
+                Text("100% No P2W", fontSize = 10.sp, color = TextSecondary)
+            }
+        }
+    }
+}
+
+@Composable
+fun RarityBadge(rarity: Rarity) {
+    Box(
+        modifier = Modifier
+            .background(rarity.color.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            rarity.displayName,
+            color = rarity.color,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
     }
 }

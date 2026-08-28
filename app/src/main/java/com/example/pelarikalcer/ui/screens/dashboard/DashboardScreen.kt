@@ -3,8 +3,6 @@ package com.example.pelarikalcer.ui.screens.dashboard
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,7 +17,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -116,10 +113,10 @@ fun DashboardHeader(user: UserEntity?, onOpenAiCoach: () -> Unit) {
             Column {
                 val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
                 val greeting = when {
-                    hour < 11 -> "Selamat Pagi ☀️"
-                    hour < 15 -> "Selamat Siang 🌤️"
-                    hour < 18 -> "Selamat Sore 🌅"
-                    else -> "Selamat Malam 🌙"
+                    hour < 11 -> "Selamat Pagi"
+                    hour < 15 -> "Selamat Siang"
+                    hour < 18 -> "Selamat Sore"
+                    else -> "Selamat Malam"
                 }
                 Text(
                     text = greeting,
@@ -135,7 +132,7 @@ fun DashboardHeader(user: UserEntity?, onOpenAiCoach: () -> Unit) {
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                // AI Coach button
+                // Coach button
                 Box(
                     modifier = Modifier
                         .size(46.dp)
@@ -146,7 +143,7 @@ fun DashboardHeader(user: UserEntity?, onOpenAiCoach: () -> Unit) {
                         .clickable(onClick = onOpenAiCoach),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.SmartToy, contentDescription = "AI Coach", tint = Color.White, modifier = Modifier.size(24.dp))
+                    Icon(Icons.Default.Sports, contentDescription = "Coach Lari", tint = Color.White, modifier = Modifier.size(24.dp))
                 }
 
                 // Avatar
@@ -200,7 +197,10 @@ fun WeeklyStreakSection(streak: Int, totalPoints: Int) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("🔥 Streak Lari", style = MaterialTheme.typography.labelLarge, color = TextSecondary, fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.LocalFireDepartment, contentDescription = null, tint = StreakOrange, modifier = Modifier.size(16.dp))
+                    Text("Streak Lari", style = MaterialTheme.typography.labelLarge, color = TextSecondary, fontWeight = FontWeight.SemiBold)
+                }
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
@@ -217,9 +217,9 @@ fun WeeklyStreakSection(streak: Int, totalPoints: Int) {
                     )
                 }
                 Text(
-                    text = if (streak == 0) "Mulai lari hari ini! 💪"
-                    else if (streak >= 7) "Streak luar biasa! 🏆"
-                    else "Pertahankan terus!",
+                    text = if (streak == 0) "Mulai lari hari ini!"
+                    else if (streak >= 7) "Streak luar biasa!"
+                    else "Pertahankan konsistensimu!",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextMuted
                 )
@@ -539,7 +539,6 @@ fun RunHistoryCard(run: RunEntity) {
     }
 }
 
-// Kept for backward compat (used in old PreRunScreen)
 @Composable
 fun StatCard(
     modifier: Modifier = Modifier,
@@ -568,13 +567,11 @@ fun StatCard(
     }
 }
 
-// Stub for StreakCard (used by MainViewModelFactory seeding)
 @Composable
 fun StreakCard(streak: Int) {
     WeeklyStreakSection(streak = streak, totalPoints = 0)
 }
 
-// Stub for StatsRow
 @Composable
 fun StatsRow(totalKm: Double, totalCalories: Int, totalPoints: Int) {
     StatsSection(totalKm = totalKm, totalCalories = totalCalories, totalPoints = totalPoints, totalRuns = 0)

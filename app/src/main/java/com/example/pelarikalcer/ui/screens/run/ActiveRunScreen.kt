@@ -128,7 +128,7 @@ fun ActiveRunScreen(
                             .scale(pulseScale)
                     )
                     Text(
-                        text = if (isRunning) "● SEDANG BERLARI" else "⏸ DIJEDA",
+                        text = if (isRunning) "SEDANG BERLARI" else "DIJEDA",
                         color = if (isRunning) NeonGreen else StreakOrange,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,

@@ -170,10 +170,10 @@ fun ProfileScreen(
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
                 ProfileInfoRow(icon = Icons.Default.FitnessCenter, label = "Berat Badan", value = "${user?.weightKg ?: 65.0} kg")
-                Divider(color = TextMuted.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 10.dp))
+                HorizontalDivider(color = TextMuted.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 10.dp))
                 ProfileInfoRow(icon = Icons.Default.Email, label = "Email", value = user?.email ?: "-")
                 if (!user?.bio.isNullOrEmpty()) {
-                    Divider(color = TextMuted.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 10.dp))
+                    HorizontalDivider(color = TextMuted.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 10.dp))
                     ProfileInfoRow(icon = Icons.Default.Info, label = "Bio", value = user?.bio ?: "-")
                 }
             }
@@ -231,7 +231,7 @@ fun ProfileStatCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(28.dp))
             Spacer(modifier = Modifier.height(8.dp))

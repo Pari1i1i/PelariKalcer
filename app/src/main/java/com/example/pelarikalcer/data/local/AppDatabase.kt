@@ -4,11 +4,9 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import com.example.pelarikalcer.data.local.dao.AiCoachDao
-import com.example.pelarikalcer.data.local.dao.RunDao
-import com.example.pelarikalcer.data.local.dao.UserDao
+import androidx.room.TypeConverters
+import com.example.pelarikalcer.data.local.dao.*
 import com.example.pelarikalcer.data.local.entity.*
-import com.example.pelarikalcer.data.local.dao.ChallengeDao
 
 @Database(
     entities = [
@@ -17,20 +15,21 @@ import com.example.pelarikalcer.data.local.dao.ChallengeDao
         ChallengeEntity::class,
         UserChallengeEntity::class,
         PetEntity::class,
-        UserPetEntity::class,
         AiCoachSessionEntity::class,
         AiCoachMessageEntity::class,
         FriendEntity::class
     ],
-    version = 5,
+    version = 9,
     exportSchema = false
 )
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun userDao(): UserDao
     abstract fun runDao(): RunDao
     abstract fun aiCoachDao(): AiCoachDao
-    abstract fun challengeDao(): ChallengeDao   // baris baru
+    abstract fun challengeDao(): ChallengeDao
+    abstract fun petDao(): PetDao
 
     companion object {
         @Volatile
@@ -43,7 +42,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "pelarikalcer_db"
                 )
-                .fallbackToDestructiveMigration()
+                .fallbackToDestructiveMigration(true)
                 .build()
                 INSTANCE = instance
                 instance

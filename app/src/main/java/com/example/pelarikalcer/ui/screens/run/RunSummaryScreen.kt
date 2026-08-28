@@ -91,10 +91,10 @@ fun RunSummaryScreen(
                     Text("Lari Selesai!", fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = NeonGreen)
                     Text(
                         text = when {
-                            distanceKm >= 10 -> "Kamu luar biasa! 10K tuntas! 🏆"
-                            distanceKm >= 5 -> "5K selesai! Mantap sekali! 🔥"
-                            distanceKm >= 1 -> "Streak bertambah! Terus semangat! ⚡"
-                            else -> "Mulai yang kecil, teruslah berlari!"
+                            distanceKm >= 10 -> "Kamu luar biasa! 10K tuntas!"
+                            distanceKm >= 5 -> "5K selesai! Pencapaian hebat!"
+                            distanceKm >= 1 -> "Streak bertambah! Terus konsisten!"
+                            else -> "Awal yang bagus, teruslah bergerak!"
                         },
                         color = TextSecondary,
                         textAlign = TextAlign.Center,
@@ -193,7 +193,7 @@ fun RunSummaryScreen(
                         icon = Icons.Default.Whatshot,
                         iconTint = StreakOrange,
                         label = "STATUS STREAK",
-                        value = if (distanceKm >= 1.0) "Streak +1! 🔥" else "< 1 km"
+                        value = if (distanceKm >= 1.0) "Streak +1 Aktif" else "< 1 km"
                     )
                 }
             }

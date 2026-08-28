@@ -123,8 +123,7 @@ class AiCoachViewModel(
                 conversationHistory.add("model" to aiText)
                 addAiMessage(aiText)
             } catch (e: Exception) {
-                val errorMsg = e.localizedMessage ?: e.message ?: "Unknown error"
-                val fallback = getOfflineResponse(text) + "\n\n[Debug: $errorMsg]"
+                val fallback = getOfflineResponse(text)
                 addAiMessage(fallback)
             } finally {
                 _state.value = _state.value.copy(isLoading = false)

@@ -76,7 +76,7 @@ fun AiCoachScreen(
                                 color = TextPrimary
                             )
                             Text(
-                                text = "AI Coach Larimu",
+                                text = "Coach Larimu",
                                 fontSize = 12.sp,
                                 color = NeonGreen
                             )
