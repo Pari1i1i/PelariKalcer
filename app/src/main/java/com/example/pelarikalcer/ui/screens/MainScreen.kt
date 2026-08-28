@@ -5,10 +5,13 @@ import com.example.pelarikalcer.BuildConfig
 import androidx.compose.animation.*
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -74,6 +77,7 @@ val bottomNavItems = listOf(
     BottomNavItem.Profile
 )
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(
     userId: Int,
@@ -83,15 +87,17 @@ fun MainScreen(
     val db = remember { AppDatabase.getDatabase(context) }
     val scope = rememberCoroutineScope()
 
-    var currentRoute by remember { mutableStateOf("home") }
+    val pagerState = rememberPagerState(pageCount = { bottomNavItems.size })
     var showAiCoach by remember { mutableStateOf(false) }
     var showRunSummary by remember { mutableStateOf(false) }
 
     // Physical Back Button Interception
-    BackHandler(enabled = showAiCoach || currentRoute != "home") {
+    BackHandler(enabled = showAiCoach || pagerState.currentPage != 0) {
         when {
             showAiCoach -> showAiCoach = false
-            currentRoute != "home" -> currentRoute = "home"
+            pagerState.currentPage != 0 -> {
+                scope.launch { pagerState.animateScrollToPage(0) }
+            }
         }
     }
 
@@ -241,10 +247,13 @@ fun MainScreen(
                 elevationGainM = runState.elevationGainM,
                 elevationLossM = runState.elevationLossM,
                 maxAltitudeM = runState.maxAltitudeM,
-                onDone = { showRunSummary = false; currentRoute = "home" }
+                onDone = {
+                    showRunSummary = false
+                    scope.launch { pagerState.animateScrollToPage(0) }
+                }
             )
 
-            currentRoute == "run" && runState.isRunning -> ActiveRunScreen(
+            pagerState.currentPage == 1 && runState.isRunning -> ActiveRunScreen(
                 durationSeconds = runState.durationSeconds,
                 distanceKm = runState.distanceKm,
                 paceMinPerKm = runState.paceMinPerKm,
@@ -266,20 +275,29 @@ fun MainScreen(
                             .weight(1f)
                             .windowInsetsPadding(WindowInsets.statusBars)
                     ) {
-                        when (currentRoute) {
-                            "home" -> {
-                                DashboardScreen(
+                        // Smooth Horizontal Pager for Gesture / Slide Swipe
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize(),
+                            beyondViewportPageCount = 1,
+                            userScrollEnabled = !runState.isRunning
+                        ) { page ->
+                            when (page) {
+                                0 -> DashboardScreen(
                                     user = mainState.user,
                                     recentRuns = mainState.recentRuns,
                                     totalDistanceKm = mainState.totalDistanceKm,
                                     totalCalories = mainState.totalCalories,
-                                    onStartRun = { currentRoute = "run" },
+                                    onStartRun = {
+                                        scope.launch { pagerState.animateScrollToPage(1) }
+                                    },
                                     onOpenAiCoach = { showAiCoach = true }
                                 )
-                            }
-                            "run" -> PreRunScreen(onStart = { runVm.startRun() })
-                            "pet" -> {
-                                FullPetScreen(
+                                1 -> PreRunScreen(
+                                    isActiveTab = pagerState.currentPage == 1,
+                                    onStart = { runVm.startRun() }
+                                )
+                                2 -> FullPetScreen(
                                     activePet = mainState.activePet,
                                     allPets = mainState.inventoryPets,
                                     userPoints = mainState.user?.totalPoints ?: 0,
@@ -289,63 +307,61 @@ fun MainScreen(
                                     onGachaRoll = { mainVm.performGacha() },
                                     onDirectBuy = { species -> mainVm.directBuyPet(species) }
                                 )
-                            }
-                            "challenges" -> ChallengesScreen(
-                                totalDistanceKm = mainState.totalDistanceKm
-                            )
-                            "leaderboard" -> LeaderboardScreen(
-                                globalLeaderboard = globalLeaderboard,
-                                friendsLeaderboard = mergedFriendsLeaderboard,
-                                suggestedFriends = suggestedFriends,
-                                pendingRequests = pendingRequests,
-                                sentRequestEmails = sentRequestEmails,
-                                friendUserIds = friendUserIds,
-                                currentUserId = userId,
-                                currentUserEmail = myEmail,
-                                onSendRequest = { targetUser ->
-                                    scope.launch {
-                                        if (myEmail.isNotBlank() && targetUser.email.isNotBlank()) {
-                                            com.example.pelarikalcer.data.remote.SupabaseClient.sendFriendRequest(myEmail, targetUser.email)
-                                            sentRequestEmails = sentRequestEmails + targetUser.email
-                                        }
-                                    }
-                                },
-                                onAcceptRequest = { senderUser ->
-                                    scope.launch {
-                                        if (myEmail.isNotBlank() && senderUser.email.isNotBlank()) {
-                                            com.example.pelarikalcer.data.remote.SupabaseClient.acceptFriendRequest(myEmail, senderUser.email)
-                                            pendingRequests = pendingRequests.filter { it.email != senderUser.email }
-                                            if (senderUser.userId > 0) {
-                                                db.userDao().insertFriend(com.example.pelarikalcer.data.local.entity.FriendEntity(userId, senderUser.userId))
-                                                db.userDao().insertFriend(com.example.pelarikalcer.data.local.entity.FriendEntity(senderUser.userId, userId))
+                                3 -> ChallengesScreen(
+                                    totalDistanceKm = mainState.totalDistanceKm
+                                )
+                                4 -> LeaderboardScreen(
+                                    globalLeaderboard = globalLeaderboard,
+                                    friendsLeaderboard = mergedFriendsLeaderboard,
+                                    suggestedFriends = suggestedFriends,
+                                    pendingRequests = pendingRequests,
+                                    sentRequestEmails = sentRequestEmails,
+                                    friendUserIds = friendUserIds,
+                                    currentUserId = userId,
+                                    currentUserEmail = myEmail,
+                                    onSendRequest = { targetUser ->
+                                        scope.launch {
+                                            if (myEmail.isNotBlank() && targetUser.email.isNotBlank()) {
+                                                com.example.pelarikalcer.data.remote.SupabaseClient.sendFriendRequest(myEmail, targetUser.email)
+                                                sentRequestEmails = sentRequestEmails + targetUser.email
                                             }
-                                            cloudAcceptedFriends = com.example.pelarikalcer.data.remote.SupabaseClient.fetchAcceptedFriends(myEmail)
+                                        }
+                                    },
+                                    onAcceptRequest = { senderUser ->
+                                        scope.launch {
+                                            if (myEmail.isNotBlank() && senderUser.email.isNotBlank()) {
+                                                com.example.pelarikalcer.data.remote.SupabaseClient.acceptFriendRequest(myEmail, senderUser.email)
+                                                pendingRequests = pendingRequests.filter { it.email != senderUser.email }
+                                                if (senderUser.userId > 0) {
+                                                    db.userDao().insertFriend(com.example.pelarikalcer.data.local.entity.FriendEntity(userId, senderUser.userId))
+                                                    db.userDao().insertFriend(com.example.pelarikalcer.data.local.entity.FriendEntity(senderUser.userId, userId))
+                                                }
+                                                cloudAcceptedFriends = com.example.pelarikalcer.data.remote.SupabaseClient.fetchAcceptedFriends(myEmail)
+                                            }
+                                        }
+                                    },
+                                    onRejectRequest = { senderUser ->
+                                        scope.launch {
+                                            if (myEmail.isNotBlank() && senderUser.email.isNotBlank()) {
+                                                com.example.pelarikalcer.data.remote.SupabaseClient.removeFriend(myEmail, senderUser.email)
+                                                pendingRequests = pendingRequests.filter { it.email != senderUser.email }
+                                            }
+                                        }
+                                    },
+                                    onRemoveFriend = { targetUser ->
+                                        scope.launch {
+                                            if (targetUser.userId > 0) {
+                                                db.userDao().removeFriend(userId, targetUser.userId)
+                                            }
+                                            if (myEmail.isNotBlank() && targetUser.email.isNotBlank()) {
+                                                com.example.pelarikalcer.data.remote.SupabaseClient.removeFriend(myEmail, targetUser.email)
+                                                sentRequestEmails = sentRequestEmails - targetUser.email
+                                                cloudAcceptedFriends = com.example.pelarikalcer.data.remote.SupabaseClient.fetchAcceptedFriends(myEmail)
+                                            }
                                         }
                                     }
-                                },
-                                onRejectRequest = { senderUser ->
-                                    scope.launch {
-                                        if (myEmail.isNotBlank() && senderUser.email.isNotBlank()) {
-                                            com.example.pelarikalcer.data.remote.SupabaseClient.removeFriend(myEmail, senderUser.email)
-                                            pendingRequests = pendingRequests.filter { it.email != senderUser.email }
-                                        }
-                                    }
-                                },
-                                onRemoveFriend = { targetUser ->
-                                    scope.launch {
-                                        if (targetUser.userId > 0) {
-                                            db.userDao().removeFriend(userId, targetUser.userId)
-                                        }
-                                        if (myEmail.isNotBlank() && targetUser.email.isNotBlank()) {
-                                            com.example.pelarikalcer.data.remote.SupabaseClient.removeFriend(myEmail, targetUser.email)
-                                            sentRequestEmails = sentRequestEmails - targetUser.email
-                                            cloudAcceptedFriends = com.example.pelarikalcer.data.remote.SupabaseClient.fetchAcceptedFriends(myEmail)
-                                        }
-                                    }
-                                }
-                            )
-                            "profile" -> {
-                                ProfileScreen(
+                                )
+                                5 -> ProfileScreen(
                                     user = mainState.user,
                                     totalDistanceKm = mainState.totalDistanceKm,
                                     totalRuns = mainState.totalRuns,
@@ -358,8 +374,12 @@ fun MainScreen(
                     }
 
                     MainBottomNavBar(
-                        selectedRoute = currentRoute,
-                        onItemSelected = { route -> currentRoute = route }
+                        selectedIndex = pagerState.currentPage,
+                        onItemSelected = { index ->
+                            scope.launch {
+                                pagerState.animateScrollToPage(index)
+                            }
+                        }
                     )
                 }
             }
@@ -378,8 +398,8 @@ fun MainScreen(
 
 @Composable
 fun MainBottomNavBar(
-    selectedRoute: String,
-    onItemSelected: (String) -> Unit,
+    selectedIndex: Int,
+    onItemSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -404,8 +424,8 @@ fun MainBottomNavBar(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                for (item in bottomNavItems) {
-                    val isSelected = selectedRoute == item.route
+                bottomNavItems.forEachIndexed { index, item ->
+                    val isSelected = selectedIndex == index
                     val isRunButton = item is BottomNavItem.Run
 
                     if (isRunButton) {
@@ -418,7 +438,7 @@ fun MainBottomNavBar(
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            IconButton(onClick = { onItemSelected(item.route) }) {
+                            IconButton(onClick = { onItemSelected(index) }) {
                                 Icon(
                                     imageVector = item.selectedIcon,
                                     contentDescription = item.label,
@@ -428,7 +448,7 @@ fun MainBottomNavBar(
                             }
                         }
                     } else {
-                        NavBarItem(item = item, isSelected = isSelected, onClick = { onItemSelected(item.route) })
+                        NavBarItem(item = item, isSelected = isSelected, onClick = { onItemSelected(index) })
                     }
                 }
             }
@@ -472,25 +492,19 @@ fun NavBarItem(item: BottomNavItem, isSelected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun PreRunScreen(onStart: () -> Unit) {
-    val context = LocalContext.current
-    var centerPoint by remember { mutableStateOf(GeoPoint(-6.2088, 106.8456)) }
-
-    LaunchedEffect(Unit) {
-        val client = LocationServices.getFusedLocationProviderClient(context)
-        try {
-            client.lastLocation.addOnSuccessListener { loc ->
-                if (loc != null) {
-                    centerPoint = GeoPoint(loc.latitude, loc.longitude)
-                }
-            }
-        } catch (e: Exception) {
-            // Location permission
+fun PreRunScreen(
+    isActiveTab: Boolean,
+    onStart: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DeepNavy)
+    ) {
+        // Only load and render hardware MapView when the Run tab is active or swiped to, with dark theme background
+        if (isActiveTab) {
+            RunScreen()
         }
-    }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        RunScreen()
 
         Box(
             modifier = Modifier
@@ -498,9 +512,9 @@ fun PreRunScreen(onStart: () -> Unit) {
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            Color.Black.copy(alpha = 0.3f),
-                            Color.Black.copy(alpha = 0.1f),
-                            DeepNavy.copy(alpha = 0.9f)
+                            Color.Black.copy(alpha = 0.35f),
+                            Color.Black.copy(alpha = 0.15f),
+                            DeepNavy.copy(alpha = 0.92f)
                         )
                     )
                 )

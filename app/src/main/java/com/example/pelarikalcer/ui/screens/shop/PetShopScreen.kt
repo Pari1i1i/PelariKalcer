@@ -128,11 +128,6 @@ fun FullPetScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Gamification Info Card (Cosmetic Tier & Loyalty Companion)
-                PetGamificationInfoCard(pet = pet)
-
             } else {
                 Box(
                     modifier = Modifier
@@ -891,67 +886,6 @@ fun PetLevelExpCard(
                         color = if (canFeed) GoldStar else TextMuted
                     )
                 }
-            }
-        }
-    }
-}
-
-/**
- * Pet Gamification & Companion Info (Clean pure gamification, no pay-to-win run effect)
- */
-@Composable
-fun PetGamificationInfoCard(pet: PetEntity) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = CardSurface)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            horizontalArrangement = Arrangement.SpaceAround
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Default.Grade, null, tint = pet.rarity.color, modifier = Modifier.size(16.dp))
-                    Text("TIER", fontWeight = FontWeight.Bold, color = TextMuted, fontSize = 11.sp)
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(pet.rarity.displayName, fontWeight = FontWeight.ExtraBold, color = pet.rarity.color, fontSize = 16.sp)
-                Text("${pet.rarity.hatchSeconds}s hatch", fontSize = 10.sp, color = TextSecondary)
-            }
-
-            HorizontalDivider(
-                color = TextMuted.copy(alpha = 0.2f),
-                modifier = Modifier.height(45.dp).width(1.dp)
-            )
-
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Default.Favorite, null, tint = Color(0xFFF43F5E), modifier = Modifier.size(16.dp))
-                    Text("LOYALTY", fontWeight = FontWeight.Bold, color = TextMuted, fontSize = 11.sp)
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Companion", fontWeight = FontWeight.ExtraBold, color = NeonGreen, fontSize = 16.sp)
-                Text("Gamifikasi Lari", fontSize = 10.sp, color = TextSecondary)
-            }
-
-            HorizontalDivider(
-                color = TextMuted.copy(alpha = 0.2f),
-                modifier = Modifier.height(45.dp).width(1.dp)
-            )
-
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Default.FitnessCenter, null, tint = AccentOrange, modifier = Modifier.size(16.dp))
-                    Text("FITUR", fontWeight = FontWeight.Bold, color = TextMuted, fontSize = 11.sp)
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Fair Play", fontWeight = FontWeight.ExtraBold, color = AccentOrange, fontSize = 16.sp)
-                Text("100% No P2W", fontSize = 10.sp, color = TextSecondary)
             }
         }
     }

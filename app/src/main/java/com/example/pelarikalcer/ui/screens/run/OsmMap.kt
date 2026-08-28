@@ -1,5 +1,6 @@
 package com.example.pelarikalcer.ui.screens.run
 
+import android.graphics.Color as AndroidColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -57,9 +58,10 @@ fun OsmMap(
 ) {
     val context = LocalContext.current
 
-    // Create MapView and overlay once, keep overlay ref for lifecycle management
+    // Set dark background color and clip to avoid white tile flickering during horizontal pager swipe
     val (mapView, locationOverlay) = remember {
         val mv = MapView(context).apply {
+            setBackgroundColor(AndroidColor.parseColor("#0A0E1A")) // Match DeepNavy app background
             setTileSource(stadiaTileSource)
             setMultiTouchControls(true)
             controller.setZoom(zoomLevel)
@@ -75,7 +77,6 @@ fun OsmMap(
         Pair(mv, overlay)
     }
 
-    // Stop GPS when composable leaves the screen
     DisposableEffect(Unit) {
         if (showUserLocation) locationOverlay.enableMyLocation()
         onDispose {
@@ -87,7 +88,6 @@ fun OsmMap(
     AndroidView(
         modifier = modifier,
         factory = { mapView },
-        update = { mv ->
-        }
+        update = { }
     )
 }
