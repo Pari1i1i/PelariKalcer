@@ -241,7 +241,7 @@ fun RunSummaryScreen(
                     ) {
                         Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = NeonGreen, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("KARTU HASIL LARI (EXPORT PNG)", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp, letterSpacing = 1.sp)
+                        Text("SHARE SEBERAPA KALCER LO!", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp, letterSpacing = 1.sp)
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -273,28 +273,34 @@ fun RunSummaryScreen(
                             onClick = {
                                 RunImageExporter.saveBitmapToGallery(context, summaryBitmap)
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).height(70.dp),
                             shape = RoundedCornerShape(20.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = DeepNavy, contentColor = NeonGreen),
-                            border = BorderStroke(1.dp, NeonGreen)
+                            border = BorderStroke(1.dp, NeonGreen),
+                            contentPadding = PaddingValues(vertical = 10.dp)
                         ) {
-                            Icon(Icons.Default.Download, contentDescription = "Simpan", modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Simpan", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.Download, contentDescription = "Simpan", modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Simpan", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
 
                         Button(
                             onClick = {
                                 RunImageExporter.shareBitmap(context, summaryBitmap)
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).height(70.dp),
                             shape = RoundedCornerShape(20.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = DeepNavy, contentColor = AccentOrange),
-                            border = BorderStroke(1.dp, AccentOrange)
+                            border = BorderStroke(1.dp, AccentOrange),
+                            contentPadding = PaddingValues(vertical = 10.dp)
                         ) {
-                            Icon(Icons.Default.Share, contentDescription = "Bagikan", modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Share", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.Share, contentDescription = "Bagikan", modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Share", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
 
                         Button(
@@ -305,13 +311,16 @@ fun RunSummaryScreen(
                                 onPostToFeed(distanceKm, paceMinPerKm, durationSeconds, base64)
                                 Toast.makeText(context, "Membuka postingan Feed...", Toast.LENGTH_SHORT).show()
                             },
-                            modifier = Modifier.weight(1.2f),
+                            modifier = Modifier.weight(1f).height(70.dp),
                             shape = RoundedCornerShape(20.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = NeonGreen, contentColor = DeepNavy)
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonGreen, contentColor = DeepNavy),
+                            contentPadding = PaddingValues(vertical = 10.dp)
                         ) {
-                            Icon(Icons.Default.RssFeed, contentDescription = "Feed", modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Post Feed", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.RssFeed, contentDescription = "Feed", modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Post Feed", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
