@@ -400,4 +400,280 @@ object SupabaseClient {
         }
         emptyList()
     }
+
+    // ─────────────────────────────────────────────
+    // SOCIAL FEED TIMELINE (POSTS, LIKES, COMMENTS)
+    // ─────────────────────────────────────────────
+
+    suspend fun createPost(post: PostItem): Boolean = withContext(Dispatchers.IO) {
+        if (!isConfigured || post.userEmail.isBlank()) return@withContext false
+        try {
+            val url = URL("$baseUrl/rest/v1/posts")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("apikey", anonKey)
+                setRequestProperty("Authorization", "Bearer $anonKey")
+                setRequestProperty("Prefer", "resolution=merge-duplicates")
+                doOutput = true
+                connectTimeout = 10_000
+                readTimeout = 10_000
+            }
+
+            val body = JSONObject().apply {
+                put("postId", if (post.postId.isBlank()) java.util.UUID.randomUUID().toString() else post.postId)
+                put("userEmail", post.userEmail)
+                put("username", post.username)
+                put("imageUrl", post.imageUrl)
+                put("caption", post.caption)
+                put("distanceKm", post.distanceKm)
+                put("paceMinPerKm", post.paceMinPerKm)
+                put("durationSeconds", post.durationSeconds)
+            }
+
+            conn.outputStream.use { it.write(body.toString().toByteArray()) }
+            conn.responseCode in 200..299
+        } catch (e: Exception) {
+            android.util.Log.e("Supabase", "createPost exception", e)
+            false
+        }
+    }
+
+    suspend fun fetchPosts(myEmail: String): List<PostItem> = withContext(Dispatchers.IO) {
+        if (!isConfigured) return@withContext emptyList()
+        try {
+            val url = URL("$baseUrl/rest/v1/posts?select=*&order=createdAt.desc&limit=50")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("apikey", anonKey)
+                setRequestProperty("Authorization", "Bearer $anonKey")
+                connectTimeout = 10_000
+                readTimeout = 10_000
+            }
+
+            if (conn.responseCode == HttpURLConnection.HTTP_OK) {
+                val jsonText = conn.inputStream.bufferedReader().readText()
+                val array = JSONArray(jsonText)
+                val posts = mutableListOf<PostItem>()
+
+                // Fetch my likes to check isLikedByMe
+                val myLikes = fetchMyLikes(myEmail)
+                // Fetch all like counts and comment counts
+                val likeCounts = fetchLikeCounts()
+                val commentCounts = fetchCommentCounts()
+
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    val id = obj.getString("postId")
+                    posts.add(
+                        PostItem(
+                            postId = id,
+                            userEmail = obj.optString("userEmail", ""),
+                            username = obj.optString("username", "PelariKalcer"),
+                            imageUrl = obj.optString("imageUrl", ""),
+                            caption = obj.optString("caption", ""),
+                            distanceKm = obj.optDouble("distanceKm", 0.0),
+                            paceMinPerKm = obj.optDouble("paceMinPerKm", 0.0),
+                            durationSeconds = obj.optInt("durationSeconds", 0),
+                            createdAt = obj.optString("createdAt", ""),
+                            likeCount = likeCounts[id] ?: 0,
+                            commentCount = commentCounts[id] ?: 0,
+                            isLikedByMe = myLikes.contains(id)
+                        )
+                    )
+                }
+                return@withContext posts
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("Supabase", "fetchPosts exception", e)
+        }
+        emptyList()
+    }
+
+    private suspend fun fetchMyLikes(myEmail: String): Set<String> = withContext(Dispatchers.IO) {
+        if (!isConfigured || myEmail.isBlank()) return@withContext emptySet()
+        try {
+            val me = URLEncoder.encode(myEmail, "UTF-8")
+            val url = URL("$baseUrl/rest/v1/post_likes?userEmail=eq.$me&select=postId")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("apikey", anonKey)
+                setRequestProperty("Authorization", "Bearer $anonKey")
+            }
+            if (conn.responseCode == HttpURLConnection.HTTP_OK) {
+                val array = JSONArray(conn.inputStream.bufferedReader().readText())
+                val set = mutableSetOf<String>()
+                for (i in 0 until array.length()) {
+                    set.add(array.getJSONObject(i).getString("postId"))
+                }
+                return@withContext set
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+        emptySet()
+    }
+
+    private suspend fun fetchLikeCounts(): Map<String, Int> = withContext(Dispatchers.IO) {
+        if (!isConfigured) return@withContext emptyMap()
+        try {
+            val url = URL("$baseUrl/rest/v1/post_likes?select=postId")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("apikey", anonKey)
+                setRequestProperty("Authorization", "Bearer $anonKey")
+            }
+            if (conn.responseCode == HttpURLConnection.HTTP_OK) {
+                val array = JSONArray(conn.inputStream.bufferedReader().readText())
+                val map = mutableMapOf<String, Int>()
+                for (i in 0 until array.length()) {
+                    val pid = array.getJSONObject(i).getString("postId")
+                    map[pid] = (map[pid] ?: 0) + 1
+                }
+                return@withContext map
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+        emptyMap()
+    }
+
+    private suspend fun fetchCommentCounts(): Map<String, Int> = withContext(Dispatchers.IO) {
+        if (!isConfigured) return@withContext emptyMap()
+        try {
+            val url = URL("$baseUrl/rest/v1/post_comments?select=postId")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("apikey", anonKey)
+                setRequestProperty("Authorization", "Bearer $anonKey")
+            }
+            if (conn.responseCode == HttpURLConnection.HTTP_OK) {
+                val array = JSONArray(conn.inputStream.bufferedReader().readText())
+                val map = mutableMapOf<String, Int>()
+                for (i in 0 until array.length()) {
+                    val pid = array.getJSONObject(i).getString("postId")
+                    map[pid] = (map[pid] ?: 0) + 1
+                }
+                return@withContext map
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+        emptyMap()
+    }
+
+    suspend fun toggleLike(postId: String, myEmail: String, currentIsLiked: Boolean): Boolean = withContext(Dispatchers.IO) {
+        if (!isConfigured || postId.isBlank() || myEmail.isBlank()) return@withContext false
+        try {
+            if (currentIsLiked) {
+                // Delete like
+                val pe = URLEncoder.encode(postId, "UTF-8")
+                val me = URLEncoder.encode(myEmail, "UTF-8")
+                val url = URL("$baseUrl/rest/v1/post_likes?postId=eq.$pe&userEmail=eq.$me")
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "DELETE"
+                    setRequestProperty("apikey", anonKey)
+                    setRequestProperty("Authorization", "Bearer $anonKey")
+                }
+                conn.responseCode in 200..299
+            } else {
+                // Insert like
+                val url = URL("$baseUrl/rest/v1/post_likes")
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("apikey", anonKey)
+                    setRequestProperty("Authorization", "Bearer $anonKey")
+                    setRequestProperty("Prefer", "resolution=merge-duplicates")
+                    doOutput = true
+                }
+                val body = JSONObject().apply {
+                    put("postId", postId)
+                    put("userEmail", myEmail)
+                }
+                conn.outputStream.use { it.write(body.toString().toByteArray()) }
+                conn.responseCode in 200..299
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("Supabase", "toggleLike exception", e)
+            false
+        }
+    }
+
+    suspend fun fetchComments(postId: String): List<CommentItem> = withContext(Dispatchers.IO) {
+        if (!isConfigured || postId.isBlank()) return@withContext emptyList()
+        try {
+            val pe = URLEncoder.encode(postId, "UTF-8")
+            val url = URL("$baseUrl/rest/v1/post_comments?postId=eq.$pe&select=*&order=createdAt.asc")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("apikey", anonKey)
+                setRequestProperty("Authorization", "Bearer $anonKey")
+            }
+            if (conn.responseCode == HttpURLConnection.HTTP_OK) {
+                val array = JSONArray(conn.inputStream.bufferedReader().readText())
+                val list = mutableListOf<CommentItem>()
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    list.add(
+                        CommentItem(
+                            commentId = obj.optString("commentId", ""),
+                            postId = obj.optString("postId", ""),
+                            userEmail = obj.optString("userEmail", ""),
+                            username = obj.optString("username", "Pelari"),
+                            text = obj.optString("text", ""),
+                            createdAt = obj.optString("createdAt", "")
+                        )
+                    )
+                }
+                return@withContext list
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+        emptyList()
+    }
+
+    suspend fun addComment(postId: String, myEmail: String, username: String, text: String): Boolean = withContext(Dispatchers.IO) {
+        if (!isConfigured || postId.isBlank() || myEmail.isBlank() || text.isBlank()) return@withContext false
+        try {
+            val url = URL("$baseUrl/rest/v1/post_comments")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("apikey", anonKey)
+                setRequestProperty("Authorization", "Bearer $anonKey")
+                doOutput = true
+            }
+            val body = JSONObject().apply {
+                put("commentId", java.util.UUID.randomUUID().toString())
+                put("postId", postId)
+                put("userEmail", myEmail)
+                put("username", username)
+                put("text", text)
+            }
+            conn.outputStream.use { it.write(body.toString().toByteArray()) }
+            conn.responseCode in 200..299
+        } catch (e: Exception) {
+            android.util.Log.e("Supabase", "addComment exception", e)
+            false
+        }
+    }
 }
+
+data class PostItem(
+    val postId: String = java.util.UUID.randomUUID().toString(),
+    val userEmail: String = "",
+    val username: String = "",
+    val imageUrl: String = "",
+    val caption: String = "",
+    val distanceKm: Double = 0.0,
+    val paceMinPerKm: Double = 0.0,
+    val durationSeconds: Int = 0,
+    val createdAt: String = "",
+    var likeCount: Int = 0,
+    var commentCount: Int = 0,
+    var isLikedByMe: Boolean = false
+)
+
+data class CommentItem(
+    val commentId: String = java.util.UUID.randomUUID().toString(),
+    val postId: String = "",
+    val userEmail: String = "",
+    val username: String = "",
+    val text: String = "",
+    val createdAt: String = ""
+)
+

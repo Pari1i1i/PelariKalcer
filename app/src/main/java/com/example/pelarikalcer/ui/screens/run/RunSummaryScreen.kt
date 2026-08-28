@@ -1,7 +1,12 @@
 package com.example.pelarikalcer.ui.screens.run
 
+import android.graphics.Bitmap
+import android.util.Base64
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -14,16 +19,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.pelarikalcer.ui.theme.*
+import com.example.pelarikalcer.utils.RunImageExporter
 import kotlinx.coroutines.delay
+import java.io.ByteArrayOutputStream
 
 @Composable
 fun RunSummaryScreen(
@@ -31,12 +42,26 @@ fun RunSummaryScreen(
     durationSeconds: Int,
     paceMinPerKm: Double,
     caloriesBurned: Int,
+    userName: String = "PelariKalcer Runner",
     elevationGainM: Double = 0.0,
     elevationLossM: Double = 0.0,
     maxAltitudeM: Double = 0.0,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    onPostToFeed: (Double, Double, Int, String) -> Unit = { _, _, _, _ -> }
 ) {
+    val context = LocalContext.current
     var showCelebration by remember { mutableStateOf(false) }
+
+    // Render export summary bitmap lazily
+    val summaryBitmap = remember(distanceKm, durationSeconds, paceMinPerKm, caloriesBurned, userName) {
+        RunImageExporter.createRunSummaryBitmap(
+            distanceKm = distanceKm,
+            durationSeconds = durationSeconds,
+            paceMinPerKm = paceMinPerKm,
+            caloriesBurned = caloriesBurned,
+            userName = userName
+        )
+    }
 
     LaunchedEffect(Unit) {
         delay(300)
@@ -114,7 +139,7 @@ fun RunSummaryScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(28.dp),
                     colors = CardDefaults.cardColors(containerColor = CardSurface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonGreen.copy(alpha = 0.4f))
+                    border = BorderStroke(1.dp, NeonGreen.copy(alpha = 0.4f))
                 ) {
                     Column(
                         modifier = Modifier.padding(24.dp),
@@ -198,57 +223,101 @@ fun RunSummaryScreen(
                 }
             }
 
-            // Elevation section (only show if elevation data available)
-            if (elevationGainM > 0 || maxAltitudeM > 0) {
-                Spacer(modifier = Modifier.height(12.dp))
-                AnimatedVisibility(
-                    visible = showCelebration,
-                    enter = fadeIn(tween(600, delayMillis = 550)) + slideInVertically { it / 3 }
+            // Export & Share Image Card Preview Section
+            Spacer(modifier = Modifier.height(20.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = CardSurface),
+                border = BorderStroke(1.dp, NeonGreen.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = CardSurface),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, AccentOrange.copy(alpha = 0.3f))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(20.dp)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            ) {
-                                Icon(Icons.Default.Landscape, null, tint = AccentOrange, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("DATA ELEVASI", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary, letterSpacing = 2.sp)
-                            }
-                            Row(modifier = Modifier.fillMaxWidth()) {
-                                ElevationCell(
-                                    modifier = Modifier.weight(1f),
-                                    icon = Icons.Default.TrendingUp,
-                                    tint = NeonGreen,
-                                    label = "Naik",
-                                    value = "+${String.format("%.0f", elevationGainM)} m"
-                                )
-                                ElevationCell(
-                                    modifier = Modifier.weight(1f),
-                                    icon = Icons.Default.TrendingDown,
-                                    tint = DangerRed,
-                                    label = "Turun",
-                                    value = "-${String.format("%.0f", elevationLossM)} m"
-                                )
-                                ElevationCell(
-                                    modifier = Modifier.weight(1f),
-                                    icon = Icons.Default.Terrain,
-                                    tint = Color(0xFF64B5F6),
-                                    label = "Tertinggi",
-                                    value = "${String.format("%.0f", maxAltitudeM)} mdpl"
-                                )
-                            }
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = NeonGreen, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("KARTU HASIL LARI (EXPORT PNG)", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp, letterSpacing = 1.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Live Card Preview
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.Black)
+                    ) {
+                        Image(
+                            bitmap = summaryBitmap.asImageBitmap(),
+                            contentDescription = "Preview Kartu Lari",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Action buttons: Download, Share, Post to Feed
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                RunImageExporter.saveBitmapToGallery(context, summaryBitmap)
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = DeepNavy, contentColor = NeonGreen),
+                            border = BorderStroke(1.dp, NeonGreen)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = "Simpan", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Simpan", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = {
+                                RunImageExporter.shareBitmap(context, summaryBitmap)
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = DeepNavy, contentColor = AccentOrange),
+                            border = BorderStroke(1.dp, AccentOrange)
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = "Bagikan", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Share", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = {
+                                val baos = ByteArrayOutputStream()
+                                summaryBitmap.compress(Bitmap.CompressFormat.JPEG, 75, baos)
+                                val base64 = "data:image/jpeg;base64," + Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+                                onPostToFeed(distanceKm, paceMinPerKm, durationSeconds, base64)
+                                Toast.makeText(context, "Membuka postingan Feed...", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1.2f),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonGreen, contentColor = DeepNavy)
+                        ) {
+                            Icon(Icons.Default.RssFeed, contentDescription = "Feed", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Post Feed", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
             // Done button
             Button(
@@ -306,25 +375,6 @@ fun ElevationCell(
         Spacer(modifier = Modifier.height(4.dp))
         Text(text = value, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextPrimary)
         Text(text = label, fontSize = 10.sp, color = TextMuted)
-    }
-}
-
-@Composable
-fun SummaryItem(
-    modifier: Modifier = Modifier,
-    label: String,
-    value: String,
-    icon: ImageVector,
-    iconTint: Color
-) {
-    Column(
-        modifier = modifier.padding(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(icon, contentDescription = label, tint = iconTint, modifier = Modifier.size(24.dp))
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(text = value, fontWeight = FontWeight.SemiBold, color = TextPrimary, fontSize = 14.sp)
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = TextMuted)
     }
 }
 

@@ -87,6 +87,9 @@ dependencies {
     // OpenStreetMap (100% Free Maps)
     implementation("org.osmdroid:osmdroid-android:6.1.18")
 
+    // Coil for Async Image Loading in Compose
+    implementation("io.coil-kt:coil-compose:2.6.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

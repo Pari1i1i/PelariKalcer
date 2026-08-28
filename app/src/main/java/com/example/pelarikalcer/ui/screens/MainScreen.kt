@@ -61,6 +61,7 @@ sealed class BottomNavItem(
     val unselectedIcon: ImageVector
 ) {
     object Home : BottomNavItem("home", "Beranda", Icons.Filled.Home, Icons.Outlined.Home)
+    object Feed : BottomNavItem("feed", "Feed", Icons.Filled.RssFeed, Icons.Outlined.RssFeed)
     object Run : BottomNavItem("run", "Lari", Icons.Filled.DirectionsRun, Icons.Outlined.DirectionsRun)
     object Pet : BottomNavItem("pet", "Pet", Icons.Filled.Pets, Icons.Outlined.Pets)
     object Challenges : BottomNavItem("challenges", "Tantangan", Icons.Filled.EmojiEvents, Icons.Outlined.EmojiEvents)
@@ -70,6 +71,7 @@ sealed class BottomNavItem(
 
 val bottomNavItems = listOf(
     BottomNavItem.Home,
+    BottomNavItem.Feed,
     BottomNavItem.Run,
     BottomNavItem.Pet,
     BottomNavItem.Challenges,
@@ -244,16 +246,34 @@ fun MainScreen(
                 durationSeconds = runState.durationSeconds,
                 paceMinPerKm = runState.paceMinPerKm,
                 caloriesBurned = runState.caloriesBurned,
+                userName = mainState.user?.username ?: "PelariKalcer Runner",
                 elevationGainM = runState.elevationGainM,
                 elevationLossM = runState.elevationLossM,
                 maxAltitudeM = runState.maxAltitudeM,
                 onDone = {
                     showRunSummary = false
                     scope.launch { pagerState.animateScrollToPage(0) }
+                },
+                onPostToFeed = { dist, pace, dur, imgBase64 ->
+                    scope.launch {
+                        com.example.pelarikalcer.data.remote.SupabaseClient.createPost(
+                            com.example.pelarikalcer.data.remote.PostItem(
+                                userEmail = myEmail,
+                                username = mainState.user?.username ?: "PelariKalcer Runner",
+                                imageUrl = imgBase64,
+                                caption = "Baru saja menyelesaikan sesi lari ${String.format("%.2f", dist)} km! 🏃💨",
+                                distanceKm = dist,
+                                paceMinPerKm = pace,
+                                durationSeconds = dur
+                            )
+                        )
+                        showRunSummary = false
+                        pagerState.animateScrollToPage(1) // Open Feed tab directly!
+                    }
                 }
             )
 
-            pagerState.currentPage == 1 && runState.isRunning -> ActiveRunScreen(
+            pagerState.currentPage == 2 && runState.isRunning -> ActiveRunScreen(
                 durationSeconds = runState.durationSeconds,
                 distanceKm = runState.distanceKm,
                 paceMinPerKm = runState.paceMinPerKm,
@@ -275,7 +295,6 @@ fun MainScreen(
                             .weight(1f)
                             .windowInsetsPadding(WindowInsets.statusBars)
                     ) {
-                        // Smooth Horizontal Pager for Gesture / Slide Swipe
                         HorizontalPager(
                             state = pagerState,
                             modifier = Modifier.fillMaxSize(),
@@ -289,15 +308,19 @@ fun MainScreen(
                                     totalDistanceKm = mainState.totalDistanceKm,
                                     totalCalories = mainState.totalCalories,
                                     onStartRun = {
-                                        scope.launch { pagerState.animateScrollToPage(1) }
+                                        scope.launch { pagerState.animateScrollToPage(2) }
                                     },
                                     onOpenAiCoach = { showAiCoach = true }
                                 )
-                                1 -> PreRunScreen(
-                                    isActiveTab = pagerState.currentPage == 1,
+                                1 -> com.example.pelarikalcer.ui.screens.feed.FeedScreen(
+                                    currentUsername = mainState.user?.username ?: "PelariKalcer",
+                                    currentUserEmail = myEmail
+                                )
+                                2 -> PreRunScreen(
+                                    isActiveTab = pagerState.currentPage == 2,
                                     onStart = { runVm.startRun() }
                                 )
-                                2 -> FullPetScreen(
+                                3 -> FullPetScreen(
                                     activePet = mainState.activePet,
                                     allPets = mainState.inventoryPets,
                                     userPoints = mainState.user?.totalPoints ?: 0,
@@ -307,10 +330,10 @@ fun MainScreen(
                                     onGachaRoll = { mainVm.performGacha() },
                                     onDirectBuy = { species -> mainVm.directBuyPet(species) }
                                 )
-                                3 -> ChallengesScreen(
+                                4 -> ChallengesScreen(
                                     totalDistanceKm = mainState.totalDistanceKm
                                 )
-                                4 -> LeaderboardScreen(
+                                5 -> LeaderboardScreen(
                                     globalLeaderboard = globalLeaderboard,
                                     friendsLeaderboard = mergedFriendsLeaderboard,
                                     suggestedFriends = suggestedFriends,
@@ -361,7 +384,7 @@ fun MainScreen(
                                         }
                                     }
                                 )
-                                5 -> ProfileScreen(
+                                6 -> ProfileScreen(
                                     user = mainState.user,
                                     totalDistanceKm = mainState.totalDistanceKm,
                                     totalRuns = mainState.totalRuns,

@@ -1,23 +1,26 @@
 package com.example.pelarikalcer.ui.screens.run
 
 import android.graphics.Color as AndroidColor
+import android.graphics.Paint
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import org.osmdroid.tileprovider.tilesource.XYTileSource
+import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
 import org.osmdroid.views.CustomZoomButtonsController
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 
@@ -54,14 +57,16 @@ fun OsmMap(
     centerPoint: GeoPoint = GeoPoint(-6.2088, 106.8456),
     zoomLevel: Double = 16.5,
     showUserLocation: Boolean = true,
+    routePoints: List<GeoPoint> = emptyList(),
+    routeColor: Int = AndroidColor.parseColor("#00FF66"), // NeonGreen
+    fitRouteBounds: Boolean = false,
     onMapReady: (MapView) -> Unit = {}
 ) {
     val context = LocalContext.current
 
-    // Set dark background color and clip to avoid white tile flickering during horizontal pager swipe
     val (mapView, locationOverlay) = remember {
         val mv = MapView(context).apply {
-            setBackgroundColor(AndroidColor.parseColor("#0A0E1A")) // Match DeepNavy app background
+            setBackgroundColor(AndroidColor.parseColor("#0A0E1A"))
             setTileSource(stadiaTileSource)
             setMultiTouchControls(true)
             controller.setZoom(zoomLevel)
@@ -69,10 +74,14 @@ fun OsmMap(
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
         }
         val overlay = MyLocationNewOverlay(GpsMyLocationProvider(context), mv).apply {
-            enableMyLocation()
-            enableFollowLocation()
+            if (showUserLocation) {
+                enableMyLocation()
+                enableFollowLocation()
+            }
         }
-        mv.overlays.add(overlay)
+        if (showUserLocation) {
+            mv.overlays.add(overlay)
+        }
         onMapReady(mv)
         Pair(mv, overlay)
     }
@@ -80,7 +89,7 @@ fun OsmMap(
     DisposableEffect(Unit) {
         if (showUserLocation) locationOverlay.enableMyLocation()
         onDispose {
-            locationOverlay.disableMyLocation()
+            if (showUserLocation) locationOverlay.disableMyLocation()
             mapView.onDetach()
         }
     }
@@ -88,6 +97,30 @@ fun OsmMap(
     AndroidView(
         modifier = modifier,
         factory = { mapView },
-        update = { }
+        update = { mv ->
+            if (routePoints.isNotEmpty()) {
+                // Remove existing polylines
+                mv.overlays.removeAll { it is Polyline }
+                val polyline = Polyline(mv).apply {
+                    setPoints(routePoints)
+                    outlinePaint.color = routeColor
+                    outlinePaint.strokeWidth = 14f
+                    outlinePaint.strokeCap = Paint.Cap.ROUND
+                    outlinePaint.strokeJoin = Paint.Join.ROUND
+                }
+                mv.overlays.add(0, polyline)
+
+                if (fitRouteBounds && routePoints.size >= 2) {
+                    try {
+                        val bbox = BoundingBox.fromGeoPoints(routePoints)
+                        mv.post {
+                            mv.zoomToBoundingBox(bbox, true, 100)
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+        }
     )
 }

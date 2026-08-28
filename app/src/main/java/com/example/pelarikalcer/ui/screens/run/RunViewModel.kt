@@ -38,7 +38,8 @@ data class RunState(
     val maxAltitudeM: Double = 0.0,
     // Coordinates for OSM map
     val currentLatitude: Double? = null,
-    val currentLongitude: Double? = null
+    val currentLongitude: Double? = null,
+    val routePoints: List<org.osmdroid.util.GeoPoint> = emptyList()
 )
 
 class RunViewModel(
@@ -64,6 +65,7 @@ class RunViewModel(
     private var accumulatedElevationGain: Double = 0.0
     private var accumulatedElevationLoss: Double = 0.0
     private var maxAltitude: Double = Double.MIN_VALUE
+    private val recordedRoutePoints = mutableListOf<org.osmdroid.util.GeoPoint>()
 
     private val locationRequest = LocationRequest.Builder(
         Priority.PRIORITY_HIGH_ACCURACY, 3000L
@@ -77,6 +79,9 @@ class RunViewModel(
         override fun onLocationResult(result: LocationResult) {
             val location = result.lastLocation ?: return
             if (!_state.value.isRunning || _state.value.isPaused) return
+
+            val point = org.osmdroid.util.GeoPoint(location.latitude, location.longitude)
+            recordedRoutePoints.add(point)
 
             // Distance
             lastLocation?.let { prev ->
@@ -119,7 +124,8 @@ class RunViewModel(
             maxAltitudeM = if (maxAltitude == Double.MIN_VALUE) 0.0 else maxAltitude,
             currentAltitudeM = location?.altitude ?: _state.value.currentAltitudeM,
             currentLatitude = location?.latitude ?: _state.value.currentLatitude,
-            currentLongitude = location?.longitude ?: _state.value.currentLongitude
+            currentLongitude = location?.longitude ?: _state.value.currentLongitude,
+            routePoints = recordedRoutePoints.toList()
         )
     }
 
@@ -132,6 +138,7 @@ class RunViewModel(
         maxAltitude = Double.MIN_VALUE
         lastLocation = null
         lastAltitude = null
+        recordedRoutePoints.clear()
 
         _state.value = RunState(
             isRunning = true,
