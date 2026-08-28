@@ -57,11 +57,12 @@ fun FeedScreen(
     var isLoading by remember { mutableStateOf(true) }
     var showCreateDialog by remember { mutableStateOf(false) }
 
-    // Selected post for commenting
+    // Selected post for commenting & Full Image Preview
     var selectedPostForComments by remember { mutableStateOf<PostItem?>(null) }
     var comments by remember { mutableStateOf<List<CommentItem>>(emptyList()) }
     var newCommentText by remember { mutableStateOf("") }
     var isSendingComment by remember { mutableStateOf(false) }
+    var fullImagePreviewUrl by remember { mutableStateOf<String?>(null) }
 
     // Refresh posts from Supabase
     val refreshPosts: () -> Unit = {
@@ -157,6 +158,9 @@ fun FeedScreen(
                                 scope.launch {
                                     comments = SupabaseClient.fetchComments(post.postId)
                                 }
+                            },
+                            onImageClick = { url ->
+                                fullImagePreviewUrl = url
                             }
                         )
                     }
@@ -276,6 +280,64 @@ fun FeedScreen(
                 }
             }
         }
+
+        // Full Image Preview Modal
+        fullImagePreviewUrl?.let { url ->
+            FullImagePreviewModal(
+                imageUrl = url,
+                onDismiss = { fullImagePreviewUrl = null }
+            )
+        }
+    }
+}
+
+@Composable
+fun FullImagePreviewModal(
+    imageUrl: String,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.94f))
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            val bitmap = remember(imageUrl) { decodeBase64ToBitmap(imageUrl) }
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "Full Preview",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                        .clip(RoundedCornerShape(12.dp))
+                )
+            } else {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = "Full Preview",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                        .clip(RoundedCornerShape(12.dp))
+                )
+            }
+
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .size(44.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Tutup", tint = Color.White)
+            }
+        }
     }
 }
 
@@ -283,7 +345,8 @@ fun FeedScreen(
 fun PostCard(
     post: PostItem,
     onLikeToggle: () -> Unit,
-    onCommentClick: () -> Unit
+    onCommentClick: () -> Unit,
+    onImageClick: (String) -> Unit = {}
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -381,7 +444,7 @@ fun PostCard(
                 Spacer(modifier = Modifier.height(10.dp))
             }
 
-            // Post Image (Base64 data or URL)
+            // Post Image (Base64 data or URL) - Click to Open Full Image Preview
             if (post.imageUrl.isNotBlank()) {
                 val bitmap = remember(post.imageUrl) { decodeBase64ToBitmap(post.imageUrl) }
                 Box(
@@ -390,6 +453,7 @@ fun PostCard(
                         .height(260.dp)
                         .clip(RoundedCornerShape(14.dp))
                         .background(Color.Black)
+                        .clickable { onImageClick(post.imageUrl) }
                 ) {
                     if (bitmap != null) {
                         Image(
@@ -405,6 +469,16 @@ fun PostCard(
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
                         )
+                    }
+                    // Hint Icon for full preview
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(8.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                            .padding(6.dp)
+                    ) {
+                        Icon(Icons.Default.Fullscreen, contentDescription = "Perbesar", tint = Color.White, modifier = Modifier.size(18.dp))
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))

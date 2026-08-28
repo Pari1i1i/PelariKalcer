@@ -12,6 +12,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -72,10 +73,8 @@ sealed class BottomNavItem(
 val bottomNavItems = listOf(
     BottomNavItem.Home,
     BottomNavItem.Feed,
-    BottomNavItem.Run,
+    BottomNavItem.Run,   // Center position
     BottomNavItem.Pet,
-    BottomNavItem.Challenges,
-    BottomNavItem.Leaderboard,
     BottomNavItem.Profile
 )
 
@@ -92,11 +91,18 @@ fun MainScreen(
     val pagerState = rememberPagerState(pageCount = { bottomNavItems.size })
     var showAiCoach by remember { mutableStateOf(false) }
     var showRunSummary by remember { mutableStateOf(false) }
+    var showPreRun by remember { mutableStateOf(false) }
+    var showChallenges by remember { mutableStateOf(false) }
+    var showLeaderboard by remember { mutableStateOf(false) }
 
     // Physical Back Button Interception
-    BackHandler(enabled = showAiCoach || pagerState.currentPage != 0) {
+    BackHandler(enabled = showAiCoach || showRunSummary || showPreRun || showChallenges || showLeaderboard || pagerState.currentPage != 0) {
         when {
             showAiCoach -> showAiCoach = false
+            showRunSummary -> showRunSummary = false
+            showPreRun -> showPreRun = false
+            showChallenges -> showChallenges = false
+            showLeaderboard -> showLeaderboard = false
             pagerState.currentPage != 0 -> {
                 scope.launch { pagerState.animateScrollToPage(0) }
             }
@@ -273,20 +279,139 @@ fun MainScreen(
                 }
             )
 
-            pagerState.currentPage == 2 && runState.isRunning -> ActiveRunScreen(
-                durationSeconds = runState.durationSeconds,
-                distanceKm = runState.distanceKm,
-                paceMinPerKm = runState.paceMinPerKm,
-                calories = runState.caloriesBurned,
-                isRunning = !runState.isPaused,
-                elevationGainM = runState.elevationGainM,
-                elevationLossM = runState.elevationLossM,
-                currentAltitudeM = runState.currentAltitudeM,
-                currentLatitude = runState.currentLatitude,
-                currentLongitude = runState.currentLongitude,
-                onPauseResume = runVm::pauseResume,
-                onFinish = runVm::finishRun
-            )
+            showPreRun || runState.isRunning -> {
+                if (runState.isRunning) {
+                    ActiveRunScreen(
+                        durationSeconds = runState.durationSeconds,
+                        distanceKm = runState.distanceKm,
+                        paceMinPerKm = runState.paceMinPerKm,
+                        calories = runState.caloriesBurned,
+                        isRunning = !runState.isPaused,
+                        elevationGainM = runState.elevationGainM,
+                        elevationLossM = runState.elevationLossM,
+                        currentAltitudeM = runState.currentAltitudeM,
+                        currentLatitude = runState.currentLatitude,
+                        currentLongitude = runState.currentLongitude,
+                        onPauseResume = runVm::pauseResume,
+                        onFinish = runVm::finishRun
+                    )
+                } else {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        PreRunScreen(
+                            isActiveTab = true,
+                            onStart = { runVm.startRun() }
+                        )
+                        IconButton(
+                            onClick = { showPreRun = false },
+                            modifier = Modifier
+                                .statusBarsPadding()
+                                .padding(16.dp)
+                                .size(40.dp)
+                                .background(CardSurface, CircleShape)
+                        ) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Kembali", tint = NeonGreen)
+                        }
+                    }
+                }
+            }
+
+            showChallenges -> {
+                Box(modifier = Modifier.fillMaxSize().background(DeepNavy)) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .statusBarsPadding()
+                                .background(CardSurface)
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = { showChallenges = false }) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Kembali", tint = NeonGreen)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Tantangan Lari", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = TextPrimary)
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            ChallengesScreen(totalDistanceKm = mainState.totalDistanceKm)
+                        }
+                    }
+                }
+            }
+
+            showLeaderboard -> {
+                Box(modifier = Modifier.fillMaxSize().background(DeepNavy)) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .statusBarsPadding()
+                                .background(CardSurface)
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = { showLeaderboard = false }) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Kembali", tint = NeonGreen)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Leaderboard Pelari", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = TextPrimary)
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            LeaderboardScreen(
+                                globalLeaderboard = globalLeaderboard,
+                                friendsLeaderboard = mergedFriendsLeaderboard,
+                                suggestedFriends = suggestedFriends,
+                                pendingRequests = pendingRequests,
+                                sentRequestEmails = sentRequestEmails,
+                                friendUserIds = friendUserIds,
+                                currentUserId = userId,
+                                currentUserEmail = myEmail,
+                                onSendRequest = { targetUser ->
+                                    scope.launch {
+                                        if (myEmail.isNotBlank() && targetUser.email.isNotBlank()) {
+                                            com.example.pelarikalcer.data.remote.SupabaseClient.sendFriendRequest(myEmail, targetUser.email)
+                                            sentRequestEmails = sentRequestEmails + targetUser.email
+                                        }
+                                    }
+                                },
+                                onAcceptRequest = { senderUser ->
+                                    scope.launch {
+                                        if (myEmail.isNotBlank() && senderUser.email.isNotBlank()) {
+                                            com.example.pelarikalcer.data.remote.SupabaseClient.acceptFriendRequest(myEmail, senderUser.email)
+                                            pendingRequests = pendingRequests.filter { it.email != senderUser.email }
+                                            if (senderUser.userId > 0) {
+                                                db.userDao().insertFriend(com.example.pelarikalcer.data.local.entity.FriendEntity(userId, senderUser.userId))
+                                                db.userDao().insertFriend(com.example.pelarikalcer.data.local.entity.FriendEntity(senderUser.userId, userId))
+                                            }
+                                            cloudAcceptedFriends = com.example.pelarikalcer.data.remote.SupabaseClient.fetchAcceptedFriends(myEmail)
+                                        }
+                                    }
+                                },
+                                onRejectRequest = { senderUser ->
+                                    scope.launch {
+                                        if (myEmail.isNotBlank() && senderUser.email.isNotBlank()) {
+                                            com.example.pelarikalcer.data.remote.SupabaseClient.removeFriend(myEmail, senderUser.email)
+                                            pendingRequests = pendingRequests.filter { it.email != senderUser.email }
+                                        }
+                                    }
+                                },
+                                onRemoveFriend = { targetUser ->
+                                    scope.launch {
+                                        if (targetUser.userId > 0) {
+                                            db.userDao().removeFriend(userId, targetUser.userId)
+                                        }
+                                        if (myEmail.isNotBlank() && targetUser.email.isNotBlank()) {
+                                            com.example.pelarikalcer.data.remote.SupabaseClient.removeFriend(myEmail, targetUser.email)
+                                            sentRequestEmails = sentRequestEmails - targetUser.email
+                                            cloudAcceptedFriends = com.example.pelarikalcer.data.remote.SupabaseClient.fetchAcceptedFriends(myEmail)
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
 
             else -> {
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -307,10 +432,10 @@ fun MainScreen(
                                     recentRuns = mainState.recentRuns,
                                     totalDistanceKm = mainState.totalDistanceKm,
                                     totalCalories = mainState.totalCalories,
-                                    onStartRun = {
-                                        scope.launch { pagerState.animateScrollToPage(2) }
-                                    },
-                                    onOpenAiCoach = { showAiCoach = true }
+                                    onStartRun = { showPreRun = true },
+                                    onOpenAiCoach = { showAiCoach = true },
+                                    onOpenChallenges = { showChallenges = true },
+                                    onOpenLeaderboard = { showLeaderboard = true }
                                 )
                                 1 -> com.example.pelarikalcer.ui.screens.feed.FeedScreen(
                                     currentUsername = mainState.user?.username ?: "PelariKalcer",
@@ -330,61 +455,7 @@ fun MainScreen(
                                     onGachaRoll = { mainVm.performGacha() },
                                     onDirectBuy = { species -> mainVm.directBuyPet(species) }
                                 )
-                                4 -> ChallengesScreen(
-                                    totalDistanceKm = mainState.totalDistanceKm
-                                )
-                                5 -> LeaderboardScreen(
-                                    globalLeaderboard = globalLeaderboard,
-                                    friendsLeaderboard = mergedFriendsLeaderboard,
-                                    suggestedFriends = suggestedFriends,
-                                    pendingRequests = pendingRequests,
-                                    sentRequestEmails = sentRequestEmails,
-                                    friendUserIds = friendUserIds,
-                                    currentUserId = userId,
-                                    currentUserEmail = myEmail,
-                                    onSendRequest = { targetUser ->
-                                        scope.launch {
-                                            if (myEmail.isNotBlank() && targetUser.email.isNotBlank()) {
-                                                com.example.pelarikalcer.data.remote.SupabaseClient.sendFriendRequest(myEmail, targetUser.email)
-                                                sentRequestEmails = sentRequestEmails + targetUser.email
-                                            }
-                                        }
-                                    },
-                                    onAcceptRequest = { senderUser ->
-                                        scope.launch {
-                                            if (myEmail.isNotBlank() && senderUser.email.isNotBlank()) {
-                                                com.example.pelarikalcer.data.remote.SupabaseClient.acceptFriendRequest(myEmail, senderUser.email)
-                                                pendingRequests = pendingRequests.filter { it.email != senderUser.email }
-                                                if (senderUser.userId > 0) {
-                                                    db.userDao().insertFriend(com.example.pelarikalcer.data.local.entity.FriendEntity(userId, senderUser.userId))
-                                                    db.userDao().insertFriend(com.example.pelarikalcer.data.local.entity.FriendEntity(senderUser.userId, userId))
-                                                }
-                                                cloudAcceptedFriends = com.example.pelarikalcer.data.remote.SupabaseClient.fetchAcceptedFriends(myEmail)
-                                            }
-                                        }
-                                    },
-                                    onRejectRequest = { senderUser ->
-                                        scope.launch {
-                                            if (myEmail.isNotBlank() && senderUser.email.isNotBlank()) {
-                                                com.example.pelarikalcer.data.remote.SupabaseClient.removeFriend(myEmail, senderUser.email)
-                                                pendingRequests = pendingRequests.filter { it.email != senderUser.email }
-                                            }
-                                        }
-                                    },
-                                    onRemoveFriend = { targetUser ->
-                                        scope.launch {
-                                            if (targetUser.userId > 0) {
-                                                db.userDao().removeFriend(userId, targetUser.userId)
-                                            }
-                                            if (myEmail.isNotBlank() && targetUser.email.isNotBlank()) {
-                                                com.example.pelarikalcer.data.remote.SupabaseClient.removeFriend(myEmail, targetUser.email)
-                                                sentRequestEmails = sentRequestEmails - targetUser.email
-                                                cloudAcceptedFriends = com.example.pelarikalcer.data.remote.SupabaseClient.fetchAcceptedFriends(myEmail)
-                                            }
-                                        }
-                                    }
-                                )
-                                6 -> ProfileScreen(
+                                4 -> ProfileScreen(
                                     user = mainState.user,
                                     totalDistanceKm = mainState.totalDistanceKm,
                                     totalRuns = mainState.totalRuns,
@@ -399,9 +470,7 @@ fun MainScreen(
                     MainBottomNavBar(
                         selectedIndex = pagerState.currentPage,
                         onItemSelected = { index ->
-                            scope.launch {
-                                pagerState.animateScrollToPage(index)
-                            }
+                            scope.launch { pagerState.animateScrollToPage(index) }
                         }
                     )
                 }

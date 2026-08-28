@@ -35,7 +35,9 @@ fun DashboardScreen(
     totalDistanceKm: Double,
     totalCalories: Int,
     onStartRun: () -> Unit,
-    onOpenAiCoach: () -> Unit
+    onOpenAiCoach: () -> Unit,
+    onOpenChallenges: () -> Unit = {},
+    onOpenLeaderboard: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
 
@@ -60,7 +62,7 @@ fun DashboardScreen(
                 totalPoints = user?.totalPoints ?: 0
             )
 
-            // Stats cards (Strava-style horizontal scrollable)
+            // Stats cards
             StatsSection(
                 totalKm = totalDistanceKm,
                 totalCalories = totalCalories,
@@ -71,6 +73,12 @@ fun DashboardScreen(
             // Start Run CTA
             StartRunButton(onClick = onStartRun)
 
+            // Quick Access Cards for Challenges & Leaderboard
+            QuickAccessMenuSection(
+                onOpenChallenges = onOpenChallenges,
+                onOpenLeaderboard = onOpenLeaderboard
+            )
+
             // Recent Runs
             if (recentRuns.isNotEmpty()) {
                 RecentRunsSection(runs = recentRuns)
@@ -79,6 +87,82 @@ fun DashboardScreen(
             }
 
             Spacer(modifier = Modifier.height(120.dp))
+        }
+    }
+}
+
+@Composable
+fun QuickAccessMenuSection(
+    onOpenChallenges: () -> Unit,
+    onOpenLeaderboard: () -> Unit
+) {
+    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+//        Text(
+//            "Fitur PelariKalcer",
+//            style = MaterialTheme.typography.titleMedium,
+//            fontWeight = FontWeight.Bold,
+//            color = TextPrimary,
+//            modifier = Modifier.padding(bottom = 10.dp)
+//        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = onOpenChallenges),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = CardSurface),
+                border = BorderStroke(1.dp, AccentOrange.copy(alpha = 0.3f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(AccentOrange.copy(alpha = 0.15f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = AccentOrange, modifier = Modifier.size(24.dp))
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text("Tantangan", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
+                        Text("Target lari", fontSize = 11.sp, color = TextMuted)
+                    }
+                }
+            }
+
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = onOpenLeaderboard),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = CardSurface),
+                border = BorderStroke(1.dp, GoldStar.copy(alpha = 0.3f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(GoldStar.copy(alpha = 0.15f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Leaderboard, contentDescription = null, tint = GoldStar, modifier = Modifier.size(24.dp))
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text("Leaderboard", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
+                        Text("Peringkat pelari", fontSize = 11.sp, color = TextMuted)
+                    }
+                }
+            }
         }
     }
 }
